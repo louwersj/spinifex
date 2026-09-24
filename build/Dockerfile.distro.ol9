@@ -1,0 +1,59 @@
+ARG GO_VERSION=1.27.0
+
+FROM oraclelinux:9 AS builder
+
+ARG GO_VERSION
+ARG VERSION=dev
+
+# Build the nbdkit plugin against Oracle Linux 9's glibc and nbdkit ABI. The
+# resulting shared object must not be built in the Debian release container.
+RUN dnf install -y --setopt=install_weak_deps=False \
+        ca-certificates curl tar gzip git gcc make pkgconf-pkg-config \
+        nbdkit nbdkit-devel \
+    && dnf clean all
+
+RUN curl -fsSLo /tmp/go.tgz "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" \
+    && tar -C /usr/local -xzf /tmp/go.tgz \
+    && rm -f /tmp/go.tgz
+
+ENV PATH=/usr/local/go/bin:${PATH}
+WORKDIR /build
+
+# Copy module files first to keep dependency downloads cacheable.
+COPY spinifex/go.mod spinifex/go.sum ./spinifex/
+COPY predastore/go.mod predastore/go.sum ./predastore/
+COPY viperblock/go.mod viperblock/go.sum ./viperblock/
+COPY viperblock/nbd/go.mod viperblock/nbd/go.sum ./viperblock/nbd/
+COPY viperblock/nbd/libguestfs.org/nbdkit/go.mod ./viperblock/nbd/libguestfs.org/nbdkit/
+COPY northstar/go.mod northstar/go.sum ./northstar/
+COPY bluebottle/go.mod bluebottle/go.sum ./bluebottle/
+
+RUN cd spinifex && go work init . ../predastore ../viperblock ../viperblock/nbd ../viperblock/nbd/libguestfs.org/nbdkit ../northstar ../bluebottle
+RUN cd spinifex && go mod download
+
+COPY spinifex/ ./spinifex/
+COPY predastore/ ./predastore/
+COPY viperblock/ ./viperblock/
+COPY northstar/ ./northstar/
+COPY bluebottle/ ./bluebottle/
+
+RUN COMMIT=$(cd spinifex && git rev-parse --short HEAD 2>/dev/null || echo unknown) \
+    && cd spinifex \
+    && GOFIPS140=v1.0.0 go build -ldflags "-s -w \
+        -X github.com/mulgadc/spinifex/cmd/spinifex/cmd.Version=${VERSION} \
+        -X github.com/mulgadc/spinifex/cmd/spinifex/cmd.Commit=${COMMIT}" \
+        -o /out/spx cmd/spinifex/main.go
+
+RUN cd viperblock \
+    && GOFIPS140=v1.0.0 go build -o /out/nbdkit-viperblock-plugin.so -buildmode=c-shared nbd/viperblock.go
+
+RUN cp spinifex/scripts/setup.sh /out/setup.sh \
+    && cp spinifex/scripts/setup-ovn.sh /out/setup-ovn.sh \
+    && mkdir -p /out/systemd /out/scripts /out/udev \
+    && cp spinifex/build/systemd/* /out/systemd/ \
+    && cp spinifex/build/scripts/* /out/scripts/ \
+    && cp spinifex/build/udev/* /out/udev/ \
+    && cp spinifex/build/logrotate/spinifex /out/logrotate-spinifex
+
+FROM scratch AS export
+COPY --from=builder /out/ /

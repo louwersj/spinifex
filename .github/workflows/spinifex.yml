@@ -10,6 +10,8 @@ on:
       - go.mod
       - go.sum
       - Makefile
+      - scripts/setup.sh
+      - scripts/setup_platform_test.sh
       - .github/workflows/spinifex.yml
   pull_request:
     branches:
@@ -101,6 +103,9 @@ jobs:
 
       - name: Setup Go Workspace
         run: go work init ./spinifex ./viperblock ./predastore ./northstar ./bluebottle
+
+      - name: Verify installer platform selection
+        run: make -C spinifex test-platform
 
       # The EBS provider contract suite needs a real implementation on each
       # side of the boundary: qemu-img/qemu-nbd/qemu-io back qemunbdd, which

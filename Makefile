@@ -150,7 +150,7 @@ install-microvm: $(MICROVM_ARTIFACTS) ## Install microVM artifacts to /usr/share
 # the pre-commit gate: manifest checks, lint, vuln, and the unit and e2e-harness tiers.
 # integration and race tests skipped to keep quick, they run in CI.
 preflight:
-	@$(MAKE) --no-print-directory QUIET=1 manifest-check manifest-lint lint govulncheck test-cover diff-coverage test-package-check test-harness test-build-scripts
+	@$(MAKE) --no-print-directory QUIET=1 manifest-check manifest-lint lint govulncheck test-cover diff-coverage test-package-check test-harness test-build-scripts test-platform
 	@echo -e "\n ✅ Preflight passed — safe to commit."
 
 # Shell suites + shellcheck for build/scripts/, the systemd-unit helpers that
@@ -165,6 +165,10 @@ test-build-scripts:
 	@echo -e "\n....Running shellcheck over build/scripts/**/*.sh...."
 	shellcheck -S warning $$(find build/scripts -name '*.sh' | sort)
 	@echo "  test-build-scripts ok"
+
+test-platform: ## Verify Debian, Ubuntu, and Oracle Linux 9 installer selection
+	@echo -e "\n....Running platform installer checks...."
+	./scripts/setup_platform_test.sh
 
 # E2E harness unit tests. Build-tagged `e2e` so they're skipped by the
 # default `go test ./spinifex/...`. Runs with mocked AWS clients — no
@@ -430,6 +434,20 @@ distro-arm64:
 	tar -czf dist/spinifex-$(VERSION)-linux-arm64.tar.gz -C dist/arm64 .
 	sha256sum dist/spinifex-$(VERSION)-linux-arm64.tar.gz > dist/spinifex-$(VERSION)-linux-arm64.tar.gz.sha256
 
+# Oracle Linux 9 must carry an OL9-built nbdkit plugin: it is a C shared
+# library and therefore tied to the host's glibc and nbdkit ABI.
+distro-ol9-amd64:
+	@echo "Building Spinifex $(VERSION) Oracle Linux 9/amd64..."
+	@mkdir -p dist/
+	docker buildx build \
+		--platform linux/amd64 \
+		--build-arg VERSION=$(VERSION) \
+		-f build/Dockerfile.distro.ol9 \
+		--output type=local,dest=dist/ol9-amd64/ \
+		../
+	tar -czf dist/spinifex-$(VERSION)-ol9-amd64.tar.gz -C dist/ol9-amd64 .
+	sha256sum dist/spinifex-$(VERSION)-ol9-amd64.tar.gz > dist/spinifex-$(VERSION)-ol9-amd64.tar.gz.sha256
+
 distro-clean:
 	rm -rf dist/
 
@@ -437,4 +455,4 @@ distro-clean:
 	deploy reinstall clean \
 	install-system install-go install-aws quickinstall \
 	lint fix govulncheck nilaway \
-	distro distro-amd64 distro-arm64 distro-clean
+	distro distro-amd64 distro-arm64 distro-ol9-amd64 distro-clean test-platform

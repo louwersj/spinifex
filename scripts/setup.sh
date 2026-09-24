@@ -6,7 +6,8 @@
 #   INSTALL_SPINIFEX_CHANNEL   Release channel: latest (default), dev
 #   INSTALL_SPINIFEX_VERSION   Pin to specific version (overrides channel)
 #   INSTALL_SPINIFEX_TARBALL   Path to local tarball (skips download, for testing/air-gapped)
-#   INSTALL_SPINIFEX_SKIP_APT  Set to 1 to skip apt dependency install
+#   INSTALL_SPINIFEX_SKIP_DEPS Set to 1 to skip system dependency install
+#   INSTALL_SPINIFEX_SKIP_APT  Deprecated alias for INSTALL_SPINIFEX_SKIP_DEPS
 #   INSTALL_SPINIFEX_SKIP_AWS  Set to 1 to skip AWS CLI install
 #   INSTALL_SPINIFEX_SKIP_NEWGRP  Set to 1 to skip newgrp exec at end (for callers like dev-install.sh)
 #   ISO_BUILD                  Set to 1 when running inside a debootstrap chroot from the ISO
@@ -23,6 +24,7 @@ set -e
 
 INSTALL_SPINIFEX_CHANNEL="${INSTALL_SPINIFEX_CHANNEL:-latest}"
 INSTALL_BASE_URL="${INSTALL_BASE_URL:-https://install.mulgadc.com}"
+INSTALL_SPINIFEX_SKIP_DEPS="${INSTALL_SPINIFEX_SKIP_DEPS:-${INSTALL_SPINIFEX_SKIP_APT:-0}}"
 
 # Referenced by both the sudoers grant and the daemon, so the paths are fixed here.
 ENDPOINT_SYSCTL_HELPER="/usr/local/lib/spinifex/spinifex-set-endpoint-sysctl"
@@ -91,26 +93,36 @@ setup_sudo() {
 
 # --- OS detection ---
 detect_os() {
-    if [ ! -f /etc/os-release ]; then
-        fatal "Cannot detect OS: /etc/os-release not found"
+    OS_RELEASE_FILE="${OS_RELEASE_FILE:-/etc/os-release}"
+    if [ ! -f "$OS_RELEASE_FILE" ]; then
+        fatal "Cannot detect OS: $OS_RELEASE_FILE not found"
     fi
 
-    . /etc/os-release
+    . "$OS_RELEASE_FILE"
 
     case "$ID" in
         debian)
+            PLATFORM_FAMILY="debian"
             if [ "${VERSION_ID%%.*}" -lt 13 ] 2>/dev/null; then
                 fatal "Debian $VERSION_ID is not supported. Minimum: Debian 13"
             fi
             ;;
         ubuntu)
+            PLATFORM_FAMILY="debian"
             major="${VERSION_ID%%.*}"
             if [ "$major" -lt 24 ] 2>/dev/null; then
                 fatal "Ubuntu $VERSION_ID is not supported. Minimum: Ubuntu 24.04"
             fi
             ;;
+        ol)
+            major="${VERSION_ID%%.*}"
+            if [ "$major" -ne 9 ] 2>/dev/null; then
+                fatal "Oracle Linux $VERSION_ID is not supported. Required: Oracle Linux 9"
+            fi
+            PLATFORM_FAMILY="ol9"
+            ;;
         *)
-            fatal "Unsupported OS: $ID $VERSION_ID. Spinifex requires Debian 13+ or Ubuntu 24.04+"
+            fatal "Unsupported OS: $ID $VERSION_ID. Spinifex requires Debian 13+, Ubuntu 24.04+, or Oracle Linux 9"
             ;;
     esac
 
@@ -123,12 +135,20 @@ detect_arch() {
     case "$MACHINE" in
         x86_64)
             ARCH="amd64"
-            QEMU_PACKAGES="qemu-system-x86"
+            if [ "${PLATFORM_FAMILY:-debian}" = "ol9" ]; then
+                QEMU_PACKAGES="qemu-kvm"
+            else
+                QEMU_PACKAGES="qemu-system-x86"
+            fi
             AWS_ARCH="x86_64"
             ;;
         aarch64|arm64)
             ARCH="arm64"
-            QEMU_PACKAGES="qemu-system-arm"
+            if [ "${PLATFORM_FAMILY:-debian}" = "ol9" ]; then
+                QEMU_PACKAGES="qemu-kvm"
+            else
+                QEMU_PACKAGES="qemu-system-arm"
+            fi
             AWS_ARCH="aarch64"
             ;;
         *)
@@ -731,7 +751,7 @@ SUDOERS
     info "Scoped sudoers rules installed for spinifex-daemon (spinifex-vpcd needs none)"
 }
 
-# --- Install apt dependencies ---
+# --- Install system dependencies ---
 # NOTE: Runtime deps must stay in sync with the ISO package list at
 # scripts/iso-builder/build/packages.list in the mulga repo. When you add,
 # remove, or change a runtime package here, review that file too — drift means
@@ -748,36 +768,58 @@ jq curl iproute2 ethtool netcat-openbsd wget unzip xz-utils file
 ovn-central ovn-host openvswitch-switch openvswitch-ipsec strongswan-charon dhcpcd-base
 chrony nftables"
 
-install_apt_deps() {
-    stage "installing apt dependencies"
-    if [ "${INSTALL_SPINIFEX_SKIP_APT}" = "1" ]; then
-        info "Skipping apt dependencies (INSTALL_SPINIFEX_SKIP_APT=1)"
+# Oracle Linux packages are intentionally maintained separately from the APT
+# list: package names and service layouts differ between the two families.
+# The selected OL9 repositories must provide the OVN packages below; the DNF
+# package-resolution CI job catches repository or package-name drift.
+OL9_RUNTIME_PACKAGES="nbdkit nbdkit-devel
+qemu-img edk2-ovmf libvirt
+pciutils
+jq curl iproute ethtool nmap-ncat wget unzip xz file
+openvswitch ovn strongswan dhcp-client
+chrony nftables NetworkManager"
+
+install_system_deps() {
+    stage "installing system dependencies"
+    if [ "${INSTALL_SPINIFEX_SKIP_DEPS}" = "1" ]; then
+        info "Skipping system dependencies (INSTALL_SPINIFEX_SKIP_DEPS=1)"
     else
         info "Installing system dependencies..."
-        $SUDO apt-get update -qq
+        case "${PLATFORM_FAMILY:-}" in
+            debian)
+                $SUDO apt-get update -qq
+                # Unquoted on purpose: both variables are whitespace-separated package lists.
+                # shellcheck disable=SC2086
+                DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y -qq \
+                    $QEMU_PACKAGES $APT_RUNTIME_PACKAGES \
+                    > /dev/null
 
-        # Unquoted on purpose: both variables are whitespace-separated package lists.
-        # shellcheck disable=SC2086
-        DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y -qq \
-            $QEMU_PACKAGES $APT_RUNTIME_PACKAGES \
-            > /dev/null
+                # Only on a machine that already boots from ZFS. Pulling
+                # zfsutils-linux in unconditionally would drag zfs-dkms onto
+                # every dev box and rebuild the module on each kernel upgrade.
+                if [ "$(findmnt -no FSTYPE /)" = "zfs" ] && ! command -v zpool >/dev/null 2>&1; then
+                    info "ZFS root detected, installing zfsutils-linux..."
+                    DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y -qq zfsutils-linux > /dev/null
+                fi
+                ;;
+            ol9)
+                # Unquoted on purpose: both variables are whitespace-separated package lists.
+                # shellcheck disable=SC2086
+                $SUDO dnf install -y $QEMU_PACKAGES $OL9_RUNTIME_PACKAGES
+                ;;
+            *)
+                fatal "Internal error: no dependency installer for ${PLATFORM_FAMILY:-unknown}"
+                ;;
+        esac
 
         info "System dependencies installed"
-
-        # Only on a machine that already boots from ZFS. Pulling zfsutils-linux
-        # in unconditionally would drag zfs-dkms onto every dev box and rebuild
-        # the module on each kernel upgrade for no benefit.
-        if [ "$(findmnt -no FSTYPE /)" = "zfs" ] && ! command -v zpool >/dev/null 2>&1; then
-            info "ZFS root detected, installing zfsutils-linux..."
-            DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y -qq zfsutils-linux > /dev/null
-        fi
     fi
 
     # Mask the standalone dhcpcd.service auto-enabled on Debian Trixie when
     # dhcpcd-base is present. It binds br-wan and competes with vpcd's
     # nclient4 for OFFERs, draining the upstream pool and causing
     # intermittent DORA failures. Must run even when apt is skipped (CI
-    # bootstrap runs with INSTALL_SPINIFEX_SKIP_APT=1 against runners that
+    # bootstrap runs with INSTALL_SPINIFEX_SKIP_DEPS=1 against runners that
     # already have dhcpcd-base preinstalled). The ISO installer does the
     # same mask (cmd/installer/install/install.go).
     $SUDO systemctl disable --now dhcpcd.service 2>/dev/null || true
@@ -1416,7 +1458,7 @@ main() {
         download_spinifex
     fi
 
-    stage_enabled deps       && install_apt_deps
+    stage_enabled deps       && install_system_deps
     stage_enabled aws        && install_aws_cli
     stage_enabled users      && create_service_users
     stage_enabled sudoers    && install_sudoers

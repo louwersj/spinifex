@@ -11,6 +11,7 @@ on:
     paths:
       - scripts/setup.sh
       - scripts/lint-apt-packages.sh
+      - scripts/lint-dnf-packages.sh
       - .github/workflows/apt-packages.yml
   pull_request:
     branches:
@@ -19,6 +20,7 @@ on:
     paths:
       - scripts/setup.sh
       - scripts/lint-apt-packages.sh
+      - scripts/lint-dnf-packages.sh
       - .github/workflows/apt-packages.yml
   workflow_dispatch:
 
@@ -44,3 +46,14 @@ jobs:
 
       - name: Resolve runtime package list
         run: ./scripts/lint-apt-packages.sh ${{ matrix.image }}
+
+  ol9_packages:
+    name: Resolve dnf list (oraclelinux:9)
+    runs-on: ubuntu-26.04
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+
+      - name: Resolve runtime package list
+        run: ./scripts/lint-dnf-packages.sh oraclelinux:9

@@ -3433,15 +3433,64 @@ func parseDNSFromResolvectl(output string) []string {
 	return servers
 }
 
-// installCACertificate copies the Spinifex CA certificate into the system
-// trust store and runs update-ca-certificates so TLS clients (AWS CLI, etc.)
-// trust the self-signed gateway certificate without extra configuration.
+type caTrustStore struct {
+	certificatePath string
+	updateCommand   string
+	updateArgs      []string
+}
+
+// caTrustStoreForOSRelease returns the host trust-store convention supported
+// by the installer. Keep it pure so release packaging can test every platform
+// without needing to mutate a container's real trust database.
+func caTrustStoreForOSRelease(osRelease []byte) (caTrustStore, error) {
+	fields := make(map[string]string)
+	for line := range strings.SplitSeq(string(osRelease), "\n") {
+		key, value, ok := strings.Cut(line, "=")
+		if !ok || strings.HasPrefix(key, "#") {
+			continue
+		}
+		fields[key] = strings.Trim(value, "\"")
+	}
+
+	switch fields["ID"] {
+	case "debian", "ubuntu":
+		return caTrustStore{
+			certificatePath: "/usr/local/share/ca-certificates/spinifex-ca.crt",
+			updateCommand:   "update-ca-certificates",
+		}, nil
+	case "ol":
+		if strings.Split(fields["VERSION_ID"], ".")[0] != "9" {
+			return caTrustStore{}, fmt.Errorf("unsupported Oracle Linux version %q", fields["VERSION_ID"])
+		}
+		return caTrustStore{
+			certificatePath: "/etc/pki/ca-trust/source/anchors/spinifex-ca.crt",
+			updateCommand:   "update-ca-trust",
+			updateArgs:      []string{"extract"},
+		}, nil
+	default:
+		return caTrustStore{}, fmt.Errorf("unsupported host OS %q", fields["ID"])
+	}
+}
+
+// installCACertificate copies the Spinifex CA certificate into the supported
+// host trust store so TLS clients (AWS CLI, etc.) trust the self-signed gateway
+// certificate without extra configuration.
 func installCACertificate(caPemPath string) {
 	if os.Getuid() != 0 {
 		return
 	}
 
-	const systemCertPath = "/usr/local/share/ca-certificates/spinifex-ca.crt"
+	store, err := func() (caTrustStore, error) {
+		osRelease, err := os.ReadFile("/etc/os-release")
+		if err != nil {
+			return caTrustStore{}, err
+		}
+		return caTrustStoreForOSRelease(osRelease)
+	}()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not determine system CA trust store: %v\n", err)
+		return
+	}
 
 	data, err := os.ReadFile(caPemPath)
 	if err != nil {
@@ -3449,21 +3498,21 @@ func installCACertificate(caPemPath string) {
 		return
 	}
 
-	if err := os.MkdirAll(filepath.Dir(systemCertPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(store.certificatePath), 0755); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not create certificate directory: %v\n", err)
 		return
 	}
 
-	if err := os.WriteFile(systemCertPath, data, 0644); err != nil {
+	if err := os.WriteFile(store.certificatePath, data, 0644); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not install CA certificate: %v\n", err)
 		return
 	}
 
-	cmd := exec.Command("update-ca-certificates")
+	cmd := exec.Command(store.updateCommand, store.updateArgs...)
 	cmd.Stdout = io.Discard
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: update-ca-certificates failed: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Warning: %s failed: %v\n", store.updateCommand, err)
 		return
 	}
 

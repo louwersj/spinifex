@@ -113,8 +113,56 @@ jobs:
             spinifex/dist/spinifex-${{ github.ref_name }}-linux-arm64.tar.gz
             spinifex/dist/spinifex-${{ github.ref_name }}-linux-arm64.tar.gz.sha256
 
+  distro-ol9-amd64:
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Checkout Spinifex
+        uses: actions/checkout@v7
+        with:
+          path: spinifex
+
+      - name: Checkout Predastore
+        uses: actions/checkout@v7
+        with:
+          repository: mulgadc/predastore
+          path: predastore
+
+      - name: Checkout Viperblock
+        uses: actions/checkout@v7
+        with:
+          repository: mulgadc/viperblock
+          path: viperblock
+
+      - name: Checkout Northstar
+        uses: actions/checkout@v7
+        with:
+          repository: mulgadc/northstar
+          path: northstar
+
+      - name: Checkout Bluebottle
+        uses: actions/checkout@v7
+        with:
+          repository: mulgadc/bluebottle
+          path: bluebottle
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build Oracle Linux 9 amd64 Tarball
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: cd spinifex && make distro-ol9-amd64 VERSION="$VERSION"
+
+      - name: Upload Oracle Linux 9 amd64 Artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: distro-ol9-amd64
+          path: |
+            spinifex/dist/spinifex-${{ github.ref_name }}-ol9-amd64.tar.gz
+            spinifex/dist/spinifex-${{ github.ref_name }}-ol9-amd64.tar.gz.sha256
+
   release:
-    needs: [ distro-amd64, distro-arm64 ]
+    needs: [ distro-amd64, distro-arm64, distro-ol9-amd64 ]
     runs-on: ubuntu-26.04
     steps:
       - name: Download amd64 Artifacts
@@ -127,6 +175,12 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: distro-arm64
+          path: artifacts
+
+      - name: Download Oracle Linux 9 amd64 Artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: distro-ol9-amd64
           path: artifacts
 
       - name: Create Draft GitHub Release
