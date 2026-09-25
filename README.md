@@ -148,7 +148,11 @@ Every AWS API call is authenticated at the gateway, published to a NATS subject,
 
 ## Self-hosted Installation
 
-Installation requires an Ubuntu 26.04 or Debian 13 system. See the detailed documentation at [docs.mulgadc.com](https://docs.mulgadc.com) for installing Spinifex.
+Installation supports Ubuntu 26.04 and Debian 13. Oracle Linux 9 is supported
+when its signed Spinifex network-runtime repository is supplied; see the
+[Oracle Linux 9 deployment guide](docs/install/oracle-linux-9/README.md).
+See [docs.mulgadc.com](https://docs.mulgadc.com) for the full installation
+documentation.
 
 ### Bare Metal ISO
 

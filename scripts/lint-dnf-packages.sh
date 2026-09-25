@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Resolve the Oracle Linux 9 runtime dependency list against the real DNF
-# repositories. Mirrors lint-apt-packages.sh so packaging regressions fail in
-# CI before a release reaches an OL9 host.
+# Resolve the Oracle Linux 9 *base* dependency list against the supported DNF
+# repositories. The OVS/OVN runtime comes from an explicitly configured,
+# signed Spinifex repository and is verified by the VM release test; Oracle
+# does not publish a production-supported equivalent. See
+# docs/install/oracle-linux-9/README.md.
 set -euo pipefail
 
 IMAGE="${1:-oraclelinux:9}"
@@ -12,14 +14,14 @@ export INSTALL_SPINIFEX_LIB_ONLY
 # shellcheck source=/dev/null
 . "${SCRIPT_DIR}/setup.sh"
 
-if [ -z "${OL9_RUNTIME_PACKAGES:-}" ]; then
-    echo "setup.sh did not define OL9_RUNTIME_PACKAGES" >&2
+if [ -z "${OL9_BASE_RUNTIME_PACKAGES:-}" ]; then
+    echo "setup.sh did not define OL9_BASE_RUNTIME_PACKAGES" >&2
     exit 1
 fi
 
 echo "Resolving ${IMAGE}..."
-docker run --rm -e "PACKAGES=qemu-kvm ${OL9_RUNTIME_PACKAGES}" "${IMAGE}" bash -ceu '
+docker run --rm -e "PACKAGES=qemu-kvm ${OL9_BASE_RUNTIME_PACKAGES}" "${IMAGE}" bash -ceu '
     dnf install -y --setopt=install_weak_deps=False $PACKAGES >/dev/null
 '
 
-echo "OK: every Oracle Linux 9 runtime package resolves"
+echo "OK: every Oracle Linux 9 base runtime package resolves"

@@ -7,7 +7,10 @@ ARG VERSION=dev
 
 # Build the nbdkit plugin against Oracle Linux 9's glibc and nbdkit ABI. The
 # resulting shared object must not be built in the Debian release container.
-RUN dnf install -y --setopt=install_weak_deps=False \
+# nbdkit-devel is a build-only dependency from Oracle's unsupported CodeReady
+# Builder repository. It is never enabled by the runtime installer; the
+# resulting plugin is included in the OL9 tarball.
+RUN dnf install -y --setopt=install_weak_deps=False --enablerepo=ol9_codeready_builder \
         ca-certificates curl tar gzip git gcc make pkgconf-pkg-config \
         nbdkit nbdkit-devel \
     && dnf clean all

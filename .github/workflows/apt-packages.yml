@@ -48,7 +48,7 @@ jobs:
         run: ./scripts/lint-apt-packages.sh ${{ matrix.image }}
 
   ol9_packages:
-    name: Resolve dnf list (oraclelinux:9)
+    name: Resolve supported DNF base list (oraclelinux:9)
     runs-on: ubuntu-26.04
 
     steps:

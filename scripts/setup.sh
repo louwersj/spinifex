@@ -8,6 +8,13 @@
 #   INSTALL_SPINIFEX_TARBALL   Path to local tarball (skips download, for testing/air-gapped)
 #   INSTALL_SPINIFEX_SKIP_DEPS Set to 1 to skip system dependency install
 #   INSTALL_SPINIFEX_SKIP_APT  Deprecated alias for INSTALL_SPINIFEX_SKIP_DEPS
+#   SPINIFEX_OL9_NETWORK_REPO_URL
+#                             HTTPS URL of the signed RPM repository containing
+#                             the OL9-compatible Spinifex OVS/OVN runtime.
+#                             Required only on Oracle Linux 9.
+#   SPINIFEX_OL9_NETWORK_REPO_GPGKEY_URL
+#                             HTTPS URL of that repository's public signing key.
+#                             Required together with the repository URL on OL9.
 #   INSTALL_SPINIFEX_SKIP_AWS  Set to 1 to skip AWS CLI install
 #   INSTALL_SPINIFEX_SKIP_NEWGRP  Set to 1 to skip newgrp exec at end (for callers like dev-install.sh)
 #   ISO_BUILD                  Set to 1 when running inside a debootstrap chroot from the ISO
@@ -768,16 +775,52 @@ jq curl iproute2 ethtool netcat-openbsd wget unzip xz-utils file
 ovn-central ovn-host openvswitch-switch openvswitch-ipsec strongswan-charon dhcpcd-base
 chrony nftables"
 
-# Oracle Linux packages are intentionally maintained separately from the APT
-# list: package names and service layouts differ between the two families.
-# The selected OL9 repositories must provide the OVN packages below; the DNF
-# package-resolution CI job catches repository or package-name drift.
-OL9_RUNTIME_PACKAGES="nbdkit nbdkit-devel
+# Oracle's supported OL9 repositories provide this base set. Keep it separate
+# from the network runtime: Oracle does not publish a supported OL9 OVS/OVN
+# package set with the service contract Spinifex needs. See
+# docs/install/oracle-linux-9/README.md before changing either list.
+OL9_BASE_RUNTIME_PACKAGES="nbdkit
 qemu-img edk2-ovmf libvirt
 pciutils
 jq curl iproute ethtool nmap-ncat wget unzip xz file
-openvswitch ovn strongswan dhcp-client
+dhcp-client
 chrony nftables NetworkManager"
+
+# These packages are intentionally resolved only from the explicitly supplied
+# Spinifex network repository. Do not replace this with Oracle's Developer,
+# EPEL, or oVirt repositories: Oracle labels those sources non-production and
+# their packages do not provide this project's expected service layout.
+OL9_NETWORK_RUNTIME_PACKAGES="openvswitch ovn strongswan"
+
+configure_ol9_network_repo() {
+    local repo_url="${SPINIFEX_OL9_NETWORK_REPO_URL:-}"
+    local key_url="${SPINIFEX_OL9_NETWORK_REPO_GPGKEY_URL:-}"
+
+    [ -n "$repo_url" ] || fatal "Oracle Linux 9 requires SPINIFEX_OL9_NETWORK_REPO_URL; see docs/install/oracle-linux-9/README.md"
+    [ -n "$key_url" ] || fatal "Oracle Linux 9 requires SPINIFEX_OL9_NETWORK_REPO_GPGKEY_URL; see docs/install/oracle-linux-9/README.md"
+
+    case "$repo_url" in
+        https://*) ;;
+        *) fatal "SPINIFEX_OL9_NETWORK_REPO_URL must use HTTPS" ;;
+    esac
+    case "$key_url" in
+        https://*) ;;
+        *) fatal "SPINIFEX_OL9_NETWORK_REPO_GPGKEY_URL must use HTTPS" ;;
+    esac
+
+    # Keep this source isolated, named and signature-enforced. Its RPMs must
+    # provide the packages and systemd units documented for the OL9 runtime.
+    $SUDO install -d -m 0755 /etc/yum.repos.d
+    $SUDO tee /etc/yum.repos.d/spinifex-network.repo >/dev/null <<EOF
+[spinifex-network]
+name=Spinifex OL9 network runtime
+baseurl=${repo_url}
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=${key_url}
+EOF
+}
 
 install_system_deps() {
     stage "installing system dependencies"
@@ -803,9 +846,10 @@ install_system_deps() {
                 fi
                 ;;
             ol9)
+                configure_ol9_network_repo
                 # Unquoted on purpose: both variables are whitespace-separated package lists.
                 # shellcheck disable=SC2086
-                $SUDO dnf install -y $QEMU_PACKAGES $OL9_RUNTIME_PACKAGES
+                $SUDO dnf install -y $QEMU_PACKAGES $OL9_BASE_RUNTIME_PACKAGES $OL9_NETWORK_RUNTIME_PACKAGES
                 ;;
             *)
                 fatal "Internal error: no dependency installer for ${PLATFORM_FAMILY:-unknown}"
