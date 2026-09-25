@@ -43,4 +43,30 @@ repo_contract_case ol9-repo-url SPINIFEX_OL9_NETWORK_REPO_URL
 repo_contract_case ol9-repo-key SPINIFEX_OL9_NETWORK_REPO_GPGKEY_URL \
     SPINIFEX_OL9_NETWORK_REPO_URL=https://packages.example.invalid/ol9/x86_64
 
-echo "OK: platform selection and Oracle Linux 9 signed-repository contract"
+github_release_url_case() {
+    local name="$1" expected="$2" family="$3" arch="$4"
+    shift 4
+    if ! out=$(env INSTALL_SPINIFEX_LIB_ONLY=1 "$@" \
+        bash -c '. "$1/setup.sh"; PLATFORM_FAMILY="$2"; ARCH="$3"; github_release_download_url' _ \
+        "$SCRIPT_DIR" "$family" "$arch" 2>&1); then
+        echo "FAIL: $name: release URL failed: $out" >&2
+        exit 1
+    fi
+    case "$out" in
+        "$expected") ;;
+        *) echo "FAIL: $name: wanted $expected, got: $out" >&2; exit 1 ;;
+    esac
+}
+
+github_release_url_case github-fork-linux \
+    https://github.com/louwersj/spinifex/releases/download/v1.2.3/spinifex-v1.2.3-linux-amd64.tar.gz \
+    debian amd64 \
+    INSTALL_SPINIFEX_GITHUB_REPOSITORY=louwersj/spinifex \
+    INSTALL_SPINIFEX_VERSION=v1.2.3
+github_release_url_case github-upstream-ol9 \
+    https://github.com/mulgadc/spinifex/releases/download/v1.2.3/spinifex-v1.2.3-ol9-amd64.tar.gz \
+    ol9 amd64 \
+    INSTALL_SPINIFEX_GITHUB_REPOSITORY=mulgadc/spinifex \
+    INSTALL_SPINIFEX_VERSION=v1.2.3
+
+echo "OK: platform selection, Oracle Linux 9 repository contract, and fork-aware GitHub release URLs"

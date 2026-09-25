@@ -76,6 +76,23 @@ inside the environment and use that internal HTTPS endpoint.
 The release tarball for OL9 contains an nbdkit plugin compiled against OL9's
 glibc and nbdkit ABI. Use the `ol9-amd64` tarball, not a Debian/Ubuntu tarball.
 
+### GitHub fork and upstream releases
+
+The installer can download a version-pinned release directly from whichever
+GitHub repository produced it. This avoids hard-coding a fork name in either
+the installer or release workflow. For the current fork:
+
+```bash
+export INSTALL_SPINIFEX_GITHUB_REPOSITORY='louwersj/spinifex'
+export INSTALL_SPINIFEX_VERSION='vX.Y.Z'
+curl -fsSL https://raw.githubusercontent.com/louwersj/spinifex/vX.Y.Z/scripts/setup.sh | sudo -E bash
+```
+
+When the same change is released upstream, change only the environment value
+to `mulgadc/spinifex`; no installer or workflow edit is required. GitHub
+Actions supplies its active repository as `github.repository` when it creates
+the release, so the release artifacts follow the fork automatically.
+
 ## Release and test gates
 
 Container checks have a deliberately limited role:

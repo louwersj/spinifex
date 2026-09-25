@@ -6,6 +6,14 @@
 #   INSTALL_SPINIFEX_CHANNEL   Release channel: latest (default), dev
 #   INSTALL_SPINIFEX_VERSION   Pin to specific version (overrides channel)
 #   INSTALL_SPINIFEX_TARBALL   Path to local tarball (skips download, for testing/air-gapped)
+#   INSTALL_SPINIFEX_GITHUB_REPOSITORY
+#                             Optional owner/repository release source, for
+#                             example louwersj/spinifex. When set together
+#                             with INSTALL_SPINIFEX_VERSION, download the
+#                             matching tarball from that GitHub Release.
+#   INSTALL_SPINIFEX_GITHUB_SERVER_URL
+#                             GitHub web origin for release downloads; defaults
+#                             to https://github.com (GitHub Enterprise only).
 #   INSTALL_SPINIFEX_SKIP_DEPS Set to 1 to skip system dependency install
 #   INSTALL_SPINIFEX_SKIP_APT  Deprecated alias for INSTALL_SPINIFEX_SKIP_DEPS
 #   SPINIFEX_OL9_NETWORK_REPO_URL
@@ -31,6 +39,8 @@ set -e
 
 INSTALL_SPINIFEX_CHANNEL="${INSTALL_SPINIFEX_CHANNEL:-latest}"
 INSTALL_BASE_URL="${INSTALL_BASE_URL:-https://install.mulgadc.com}"
+INSTALL_SPINIFEX_GITHUB_REPOSITORY="${INSTALL_SPINIFEX_GITHUB_REPOSITORY:-}"
+INSTALL_SPINIFEX_GITHUB_SERVER_URL="${INSTALL_SPINIFEX_GITHUB_SERVER_URL:-https://github.com}"
 INSTALL_SPINIFEX_SKIP_DEPS="${INSTALL_SPINIFEX_SKIP_DEPS:-${INSTALL_SPINIFEX_SKIP_APT:-0}}"
 
 # Referenced by both the sudoers grant and the daemon, so the paths are fixed here.
@@ -894,6 +904,30 @@ install_aws_cli() {
 }
 
 # --- Download tarball ---
+github_release_download_url() {
+    local repository="$INSTALL_SPINIFEX_GITHUB_REPOSITORY"
+    local asset
+
+    [ -n "$INSTALL_SPINIFEX_VERSION" ] || fatal "INSTALL_SPINIFEX_GITHUB_REPOSITORY requires INSTALL_SPINIFEX_VERSION (a GitHub Release tag)"
+    case "$repository" in
+        [A-Za-z0-9._-]*/[A-Za-z0-9._-]*) ;;
+        *) fatal "INSTALL_SPINIFEX_GITHUB_REPOSITORY must be owner/repository" ;;
+    esac
+    case "$INSTALL_SPINIFEX_GITHUB_SERVER_URL" in
+        https://*) ;;
+        *) fatal "INSTALL_SPINIFEX_GITHUB_SERVER_URL must use HTTPS" ;;
+    esac
+
+    if [ "${PLATFORM_FAMILY:-debian}" = "ol9" ]; then
+        asset="spinifex-${INSTALL_SPINIFEX_VERSION}-ol9-${ARCH}.tar.gz"
+    else
+        asset="spinifex-${INSTALL_SPINIFEX_VERSION}-linux-${ARCH}.tar.gz"
+    fi
+    printf '%s/%s/releases/download/%s/%s\n' \
+        "${INSTALL_SPINIFEX_GITHUB_SERVER_URL%/}" "$repository" \
+        "$INSTALL_SPINIFEX_VERSION" "$asset"
+}
+
 download_spinifex() {
     stage "downloading/extracting spinifex release tarball"
     SPINIFEX_TMPDIR=$(mktemp -d)
@@ -909,7 +943,10 @@ download_spinifex() {
         return
     fi
 
-    if [ -n "$INSTALL_SPINIFEX_VERSION" ]; then
+    if [ -n "$INSTALL_SPINIFEX_GITHUB_REPOSITORY" ]; then
+        DOWNLOAD_URL="$(github_release_download_url)"
+        info "Downloading Spinifex $INSTALL_SPINIFEX_VERSION from GitHub release $INSTALL_SPINIFEX_GITHUB_REPOSITORY ($ARCH)..."
+    elif [ -n "$INSTALL_SPINIFEX_VERSION" ]; then
         DOWNLOAD_URL="${INSTALL_BASE_URL}/download/${INSTALL_SPINIFEX_VERSION}/${ARCH}"
         info "Downloading Spinifex $INSTALL_SPINIFEX_VERSION ($ARCH)..."
     else
