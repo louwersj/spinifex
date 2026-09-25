@@ -93,6 +93,27 @@ to `mulgadc/spinifex`; no installer or workflow edit is required. GitHub
 Actions supplies its active repository as `github.repository` when it creates
 the release, so the release artifacts follow the fork automatically.
 
+### What happens when this is merged upstream
+
+Merging this feature from a fork into `mulgadc/spinifex` does not change or
+invalidate fork installations. The release workflow always uploads artifacts
+to the repository in which it runs:
+
+| Release source | Installer value |
+| --- | --- |
+| Fork release | `INSTALL_SPINIFEX_GITHUB_REPOSITORY=louwersj/spinifex` |
+| Official release | `INSTALL_SPINIFEX_GITHUB_REPOSITORY=mulgadc/spinifex` |
+
+Existing installs that use `install.mulgadc.com` continue unchanged. A user
+chooses a GitHub source only when they deliberately set
+`INSTALL_SPINIFEX_GITHUB_REPOSITORY` and a version tag.
+
+For Oracle Linux, the signed network-runtime bundle/repository must come from
+the same release source as the Spinifex tarball. Do not combine a fork's
+tarball with an upstream bundle, or the reverse, unless that exact pair was
+published and VM-tested together. This prevents an unreviewed mix of OVS/OVN,
+strongSwan, nbdkit plugin, and service-unit versions.
+
 ## Release and test gates
 
 Container checks have a deliberately limited role:
