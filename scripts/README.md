@@ -16,6 +16,7 @@ Node installation, dev-environment lifecycle, guest image builds, and verificati
 | `dev-install.sh` | Full local dev setup through the production installer: builds from source, packs a tarball, runs `setup.sh`, initialises the cluster, and starts services under systemd. |
 | `clone-deps.sh` | Clones or updates the viperblock and predastore checkouts alongside spinifex for cross-repo development. |
 | `proxmox-ol9-test-vm.sh` | Local-only Proxmox utility for a disposable OL9 Spinifex test VM. Requires a scoped API token in `~/.config/spinifex/proxmox.env`, an already imported OL9 QCOW2 volume, and a 1-8 character `PVE_ROOT_PASSWORD` supplied only in the environment. Uses `cpu=host`, a VirtIO boot disk, 2 vCPUs/2 GiB by default, standard VGA, and an expiring root password. The short password is test-only and must never be reused. `create` refuses to replace a VM; `destroy` is explicit and only accepts `spinifex-ol9-*` names. |
+| `install-ol9-spinifex.sh` | Fully automated, guest-side Oracle Linux 9 installer contributed by Johan Louwers. It requires HTTPS URLs for the signed OVS/OVN/strongSwan RPM repository and GPG key, runs the existing production `setup.sh`, enables and starts `spinifex.target`, then verifies the target is active. It deliberately refuses other distributions and does not embed repository credentials or RPMs. |
 
 ## Dev environment
 

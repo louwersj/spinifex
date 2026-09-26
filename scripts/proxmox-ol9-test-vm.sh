@@ -157,6 +157,13 @@ destroy_vm() {
     api POST "/nodes/${PVE_NODE}/qemu/${PVE_VM_ID}/status/stop" >/dev/null || true
     sleep 2
     api DELETE "/nodes/${PVE_NODE}/qemu/${PVE_VM_ID}?purge=1&destroy-unreferenced-disks=1" >/dev/null
+    # Deletion is asynchronous on some storage backends. Do not return until
+    # the VM ID has disappeared, otherwise an immediate create races Proxmox.
+    for _ in $(seq 1 30); do
+        vm_exists || break
+        sleep 2
+    done
+    vm_exists && { echo "Timed out waiting for VM ${PVE_VM_ID} deletion" >&2; return 1; }
     echo "Destroyed disposable VM ${PVE_VM_ID}. The uploaded seed ISO is retained for inspection."
 }
 
