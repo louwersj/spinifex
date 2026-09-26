@@ -34,6 +34,10 @@ PVE_ISO_STORAGE="${PVE_ISO_STORAGE:-local}"
 PVE_BRIDGE="${PVE_BRIDGE:-vmbr0}"
 PVE_OL9_IMAGE_VOLID="${PVE_OL9_IMAGE_VOLID:-local:import/OL9U5_x86_64-kvm-b259.qcow2}"
 PVE_ROOT_PASSWORD="${PVE_ROOT_PASSWORD:-}"
+# Disabled by default. Setting this to 1 is only for local automation where
+# the test runner must SSH with the expiring root password; never use it for a
+# production or Internet-reachable Spinifex host.
+PVE_ENABLE_ROOT_SSH_PASSWORD_LOGIN="${PVE_ENABLE_ROOT_SSH_PASSWORD_LOGIN:-0}"
 PVE_SSH_PUBLIC_KEY_FILE="${PVE_SSH_PUBLIC_KEY_FILE:-}"
 PVE_CPU_CORES="${PVE_CPU_CORES:-2}"
 PVE_MEMORY_MIB="${PVE_MEMORY_MIB:-2048}"
@@ -67,7 +71,12 @@ vm_exists() {
 }
 
 make_seed_iso() {
-    local tmpdir="$1" seed_dir="$tmpdir/cidata" ssh_key=""
+    local tmpdir="$1" seed_dir="$tmpdir/cidata" ssh_key="" ssh_password_auth=false
+    case "$PVE_ENABLE_ROOT_SSH_PASSWORD_LOGIN" in
+        0) ;;
+        1) ssh_password_auth=true ;;
+        *) echo "PVE_ENABLE_ROOT_SSH_PASSWORD_LOGIN must be 0 or 1" >&2; return 2 ;;
+    esac
     mkdir -p "$seed_dir"
     if [[ -n "$PVE_SSH_PUBLIC_KEY_FILE" ]]; then
         ssh_key=$(tr -d '\n' <"$PVE_SSH_PUBLIC_KEY_FILE")
@@ -81,7 +90,7 @@ EOF
 hostname: ${PVE_VM_NAME}
 manage_etc_hosts: true
 disable_root: false
-ssh_pwauth: false
+ssh_pwauth: ${ssh_password_auth}
 chpasswd:
   expire: true
   users:
@@ -97,6 +106,13 @@ packages:
 runcmd:
   - systemctl enable --now qemu-guest-agent
 EOF
+    if [[ "$PVE_ENABLE_ROOT_SSH_PASSWORD_LOGIN" == 1 ]]; then
+        cat >>"$seed_dir/user-data" <<'EOF'
+  # Local-test-only: allow the runner to use the short, expiring root password.
+  - sed -ri 's/^#?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+  - systemctl restart sshd
+EOF
+    fi
 
     if command -v xorriso >/dev/null; then
         xorriso -as mkisofs -o "$tmpdir/seed.iso" -V cidata -J -R "$seed_dir" >/dev/null 2>&1
