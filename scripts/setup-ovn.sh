@@ -123,6 +123,16 @@ if [ -r /etc/os-release ]; then
     fi
 fi
 
+# Spinifex's service dependencies use the long-standing Debian name
+# `openvswitch-switch.service`. setup.sh supplies that name as an alias on
+# OL9, which is sufficient for dependency resolution, but systemd correctly
+# refuses to enable an alias. Operational calls in this script must therefore
+# use the canonical Oracle unit while Debian keeps its native name.
+OVS_SYSTEMD_UNIT="openvswitch-switch.service"
+if [ "$IS_ORACLE_LINUX_9" = true ]; then
+    OVS_SYSTEMD_UNIT="openvswitch.service"
+fi
+
 # Defaults
 MANAGEMENT=false
 WAN_BRIDGE=""
@@ -354,9 +364,10 @@ echo ""
 # Packages are installed by setup.sh before this script runs. Debian hosts use
 # openvswitch-switch/ovn-host/strongswan-charon; Oracle Linux 9 uses Oracle's
 # versioned openvswitch2.17/ovn22.09 packages plus their required LibreSwan
-# dependency. setup.sh installs a minimal systemd compatibility layer on OL9,
-# so the service names below remain stable across both platforms. If a package
-# is missing, the downstream ovs/ovn commands fail loudly rather than this
+# dependency. setup.sh installs a minimal systemd compatibility layer on OL9;
+# this script nevertheless uses Oracle's canonical OVS unit for start/enable
+# operations because systemd refuses to enable an alias. If a package is
+# missing, the downstream ovs/ovn commands fail loudly rather than this
 # networking script attempting an unreviewed runtime package installation.
 
 # Debian's strongswan-charon ships an AppArmor profile for /usr/lib/ipsec/charon that
@@ -422,9 +433,9 @@ ensure_clustered_db_storage() {
 echo ""
 echo "Step 2: Enabling services..."
 
-sudo systemctl enable openvswitch-switch
-sudo systemctl start openvswitch-switch
-echo "  openvswitch-switch: started"
+sudo systemctl enable "$OVS_SYSTEMD_UNIT"
+sudo systemctl start "$OVS_SYSTEMD_UNIT"
+echo "  ${OVS_SYSTEMD_UNIT}: started"
 
 if [ "$MANAGEMENT" = true ]; then
     sudo systemctl enable ovn-central
@@ -1202,7 +1213,7 @@ sudo mkdir -p "$(dirname "$PERMS_HELPER")"
 sudo tee "$PERMS_HELPER" >/dev/null <<'HELPER'
 #!/bin/sh
 # Group-own the OVS/OVN control sockets to `spinifex` so the service users reach
-# them without sudo. Driven from ExecStartPost on both openvswitch-switch and
+# them without sudo. Driven from ExecStartPost on both the canonical OVS unit and
 # ovn-controller: each recreates its own sockets on start, and the ovn-controller
 # ctl socket name embeds the pid, so it is a new file every time.
 #
@@ -1275,9 +1286,10 @@ echo "  OVS/OVN sockets: 0660 root:spinifex (group-scoped, no world access)"
 
 # Persist across restarts of both daemons. Rewritten unconditionally: an existing
 # file is the old 0666 override, and skipping would leave that exposure in place.
-# openvswitch-ipsec is included because Step 10 restarts it after this sweep,
-# so its ctl socket would otherwise be the one file left at the shipped mode.
-for unit in openvswitch-switch:/var/run/openvswitch/db.sock \
+# openvswitch-ipsec remains in the list for the later multi-node transition:
+# when Spinifex's topology helper unmasks it, its control socket must be scoped
+# to the same service group instead of reverting to the shipped mode.
+for unit in "${OVS_SYSTEMD_UNIT%.*}:/var/run/openvswitch/db.sock" \
     "ovn-controller:/var/run/ovn/*.ctl" \
     "openvswitch-ipsec:/var/run/openvswitch/ovs-monitor-ipsec.*.ctl"; do
     UNIT="${unit%%:*}"
@@ -1331,23 +1343,18 @@ fi
 # to prevent log spam during those retries.
 echo ""
 echo "Step 10: Enabling OVN auto-start on boot..."
-sudo systemctl enable openvswitch-switch 2>/dev/null || true
+sudo systemctl enable "$OVS_SYSTEMD_UNIT" 2>/dev/null || true
 sudo systemctl enable ovn-controller 2>/dev/null || true
-# ovs-monitor-ipsec drives the distro-provided IPsec implementation from OVS DB
-# cert pointers. Debian uses StrongSwan; Oracle's OVS RPM requires LibreSwan.
-# The daemon's
-# enableOVNIPSec() flips ipsec_encapsulation=true at runtime and silently drops
-# tunnel traffic if this unit isn't already up — enable at provision time so
-# daemon never needs systemd-write capability (only is-active read).
-sudo systemctl enable openvswitch-ipsec.service 2>/dev/null || true
-# Debian can install openvswitch-ipsec before StrongSwan, while Oracle installs
-# its required LibreSwan dependency in the same DNF transaction. In both cases
-# clear a stale package-install failure before the explicit, final restart.
-sudo systemctl reset-failed openvswitch-ipsec.service 2>/dev/null || true
-sudo systemctl restart openvswitch-ipsec.service 2>/dev/null || true
-echo "  openvswitch-switch:   enabled on boot"
+# ovs-monitor-ipsec consumes the cluster CA and peer certificates written by
+# `spx admin init` / join.  It must stay stopped on a fresh host: a single-node
+# cluster has no Geneve peers, and a multi-node cluster must not expose IKE
+# before every chassis can present its credentials.  The daemon invokes the
+# fixed-verb root helper installed by setup.sh to unmask and start this service
+# only once cluster topology proves IPsec is required.
+sudo systemctl mask --now openvswitch-ipsec.service 2>/dev/null || true
+echo "  ${OVS_SYSTEMD_UNIT}: enabled on boot"
 echo "  ovn-controller:       enabled on boot"
-echo "  openvswitch-ipsec:    enabled on boot"
+echo "  openvswitch-ipsec:    deferred until multi-node IPsec is configured"
 
 # --- Step 11: Health check ---
 echo ""

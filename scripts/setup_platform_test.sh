@@ -26,6 +26,29 @@ run_case debian $'ID=debian\nVERSION_ID=13\nPRETTY_NAME="Debian 13"' 'debian:amd
 run_case ubuntu $'ID=ubuntu\nVERSION_ID=24.04\nPRETTY_NAME="Ubuntu 24.04"' 'debian:amd64:qemu-system-x86'
 run_case ol9 $'ID=ol\nVERSION_ID=9.6\nPRETTY_NAME="Oracle Linux Server 9.6"' 'ol9:amd64:qemu-kvm'
 
+ol9_kernel_module_package_case() {
+    local name="$1" kernel="$2" expected="$3" out
+    if ! out=$(INSTALL_SPINIFEX_LIB_ONLY=1 TEST_KERNEL="$kernel" bash -c \
+        'uname() { [ "$1" = "-r" ] && printf "%s\\n" "$TEST_KERNEL"; }; . "$1/setup.sh"; ol9_openvswitch_kernel_module_package' \
+        _ "$SCRIPT_DIR" 2>&1); then
+        echo "FAIL: $name: package selection failed: $out" >&2
+        exit 1
+    fi
+    [ "$out" = "$expected" ] || {
+        echo "FAIL: $name: wanted $expected, got: $out" >&2
+        exit 1
+    }
+}
+
+# Both supported Oracle kernel families must resolve the module package for the
+# exact running kernel. This test has no DNF or root requirement.
+ol9_kernel_module_package_case ol9-uek-module \
+    5.15.0-306.177.4.el9uek.x86_64 \
+    kernel-uek-modules-extra-5.15.0-306.177.4.el9uek.x86_64
+ol9_kernel_module_package_case ol9-rhck-module \
+    5.14.0-570.12.1.el9_6.x86_64 \
+    kernel-modules-extra-5.14.0-570.12.1.el9_6.x86_64
+
 ol9_source_case() {
     # Keep this test free of DNF mutations: it verifies the installer accepts
     # only the explicit, reproducible Oracle repository source.
@@ -84,4 +107,4 @@ github_release_url_case github-upstream-ol9 \
     INSTALL_SPINIFEX_GITHUB_REPOSITORY=mulgadc/spinifex \
     INSTALL_SPINIFEX_VERSION=v1.2.3
 
-echo "OK: platform selection, Oracle Linux 9 Oracle-repository policy, and fork-aware GitHub release URLs"
+echo "OK: platform selection, Oracle Linux 9 module/repository policy, and fork-aware GitHub release URLs"

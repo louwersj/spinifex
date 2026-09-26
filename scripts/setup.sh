@@ -334,6 +334,14 @@ esac
 HELPER
     $SUDO chown root:root "${IPSEC_STATE_HELPER}"
     $SUDO chmod 0755 "${IPSEC_STATE_HELPER}"
+
+    # A fresh host has neither cluster membership nor the CA/certificate paths
+    # that ovs-monitor-ipsec consumes.  Starting the vendor unit at package
+    # install time is therefore both pointless on a single-node deployment and
+    # noisy on SELinux-enforcing OL9 images.  The fixed-verb helper above is
+    # the sole authority to unmask it later, after the daemon has established
+    # that a multi-node cluster actually requires Geneve encryption.
+    $SUDO systemctl mask --now openvswitch-ipsec.service >/dev/null 2>&1 || true
 }
 
 # Every port sshd actually listens on, so a host hardened onto a non-standard
@@ -808,6 +816,39 @@ chrony nftables NetworkManager"
 # smallest compatible IPsec dependency for Oracle's OVS package.
 OL9_NETWORK_RUNTIME_PACKAGES="openvswitch2.17 openvswitch2.17-ipsec
 ovn22.09-central ovn22.09-host libreswan"
+
+# OVS is a userspace package, but its forwarding datapath needs the matching
+# kernel module.  Oracle's OL9 cloud images commonly boot UEK with the module
+# split into the versioned `kernel-uek-modules-extra` package; RHCK uses the
+# equivalent `kernel-modules-extra` name.  Determine the exact running-kernel
+# package rather than installing a new kernel (or a broad meta-package) and
+# avoid touching it at all when the module is already available.
+ol9_openvswitch_kernel_module_package() {
+    local running_kernel
+    running_kernel="$(uname -r)"
+    case "$running_kernel" in
+        *uek*) printf 'kernel-uek-modules-extra-%s\n' "$running_kernel" ;;
+        *) printf 'kernel-modules-extra-%s\n' "$running_kernel" ;;
+    esac
+}
+
+ensure_ol9_openvswitch_kernel_module() {
+    local module_package
+
+    # Use the same privilege wrapper as DNF below: an unprivileged installer
+    # must not mistake an EPERM response for an absent module.
+    if $SUDO modprobe openvswitch 2>/dev/null; then
+        info "Open vSwitch kernel module is already available"
+        return 0
+    fi
+
+    module_package="$(ol9_openvswitch_kernel_module_package)"
+    info "Installing Oracle kernel modules required by Open vSwitch: $module_package"
+    $SUDO dnf install -y "$module_package"
+    $SUDO modprobe openvswitch 2>/dev/null || \
+        fatal "Open vSwitch kernel module is unavailable after installing $module_package"
+    info "Open vSwitch kernel module is available"
+}
 # Test-only override keeps platform-policy coverage unprivileged. Production
 # always uses the DNF convention below because this variable is unset.
 OL9_YUM_REPOS_DIR="${OL9_YUM_REPOS_DIR:-/etc/yum.repos.d}"
@@ -951,6 +992,11 @@ install_system_deps() {
                 # Unquoted on purpose: both variables are whitespace-separated package lists.
                 # shellcheck disable=SC2086
                 $SUDO dnf install -y $QEMU_PACKAGES $OL9_BASE_RUNTIME_PACKAGES $OL9_NETWORK_RUNTIME_PACKAGES
+                # OVS cannot operate without its kernel datapath.  The
+                # helper is deliberately conditional so images that already
+                # include it remain minimal, while default UEK cloud images
+                # obtain the exact Oracle-signed module package they need.
+                ensure_ol9_openvswitch_kernel_module
                 install_ol9_service_compatibility
                 ;;
             *)
@@ -980,8 +1026,12 @@ install_aws_cli() {
         return
     fi
 
-    if command -v aws >/dev/null 2>&1; then
-        info "AWS CLI already installed: $(aws --version 2>&1 | head -1)"
+    # The AWS installer always writes this path.  Referencing it explicitly is
+    # necessary because sudo's secure_path on RPM hosts may omit /usr/local/bin
+    # during this script even though interactive login shells later include it.
+    AWS_CLI_BIN="/usr/local/bin/aws"
+    if [ -x "$AWS_CLI_BIN" ]; then
+        info "AWS CLI already installed: $($AWS_CLI_BIN --version 2>&1 | head -1)"
         return
     fi
 
@@ -989,10 +1039,12 @@ install_aws_cli() {
     AWS_TMPDIR=$(mktemp -d)
     curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-${AWS_ARCH}.zip" -o "$AWS_TMPDIR/awscliv2.zip"
     unzip -q "$AWS_TMPDIR/awscliv2.zip" -d "$AWS_TMPDIR"
-    $SUDO "$AWS_TMPDIR/aws/install" --update > /dev/null
+    $SUDO "$AWS_TMPDIR/aws/install" --install-dir /usr/local/aws-cli \
+        --bin-dir /usr/local/bin --update > /dev/null
     rm -rf "$AWS_TMPDIR"
 
-    info "AWS CLI installed: $(aws --version 2>&1 | head -1)"
+    [ -x "$AWS_CLI_BIN" ] || fatal "AWS CLI installer completed but $AWS_CLI_BIN is missing"
+    info "AWS CLI installed: $($AWS_CLI_BIN --version 2>&1 | head -1)"
 }
 
 # --- Download tarball ---

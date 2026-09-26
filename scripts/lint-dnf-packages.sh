@@ -45,6 +45,13 @@ enabled=1
 gpgcheck=1
 EOF
     dnf install -y --setopt=install_weak_deps=False $PACKAGES >/dev/null
+
+    # The installer selects one of these versioned packages at runtime based
+    # on `uname -r` and installs it only if modprobe cannot already load OVS.
+    # Query both Oracle-supported kernel families here without downloading a
+    # 500 MB module/firmware payload into the container test.
+    dnf repoquery --available kernel-uek-modules-extra >/dev/null
+    dnf repoquery --available kernel-modules-extra >/dev/null
 '
 
-echo "OK: every Oracle Linux 9 runtime package resolves from Oracle repositories"
+echo "OK: every Oracle Linux 9 runtime and OVS kernel-module package resolves from Oracle repositories"

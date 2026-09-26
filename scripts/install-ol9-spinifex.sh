@@ -48,6 +48,10 @@ chmod 0700 "$installer"
 bash "$installer"
 systemctl enable --now spinifex.target
 systemctl is-active --quiet spinifex.target
+# A systemd target with Wants= dependencies becomes active even if a wanted
+# service fails. OVS is the non-negotiable OL9 datapath prerequisite, so make
+# the public helper fail here instead of printing a misleading success message.
+systemctl is-active --quiet openvswitch.service
 systemctl --no-pager --full status spinifex.target
 
-echo "Spinifex installation and spinifex.target startup completed on Oracle Linux 9."
+echo "Spinifex installation, OVS datapath validation, and spinifex.target startup completed on Oracle Linux 9."

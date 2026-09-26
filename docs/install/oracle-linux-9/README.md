@@ -43,6 +43,19 @@ from silently becoming the installed network stack. The installer asks DNF to
 verify Oracle's RPM signatures; it writes only the two Oracle oVirt endpoints
 and does not import a custom key.
 
+On a UEK cloud image, OVS also needs the kernel module that Oracle ships in the
+matching versioned `kernel-uek-modules-extra-$(uname -r)` package. The installer
+first tries `modprobe openvswitch`; only when that module is absent does it
+install the precise matching Oracle package. On an RHCK image it uses the
+corresponding `kernel-modules-extra-$(uname -r)` package. It never installs a
+new kernel, DKMS, EPEL, or third-party module repository.
+
+OVS IPsec remains masked on a newly installed host. A single-node cluster has
+no tunnel peer to encrypt, and a multi-node cluster must first create its
+certificate material. Spinifex's existing topology-aware service helper
+unmasks it only after formation establishes that IPsec is required; SELinux is
+never disabled for installation.
+
 ### Why EPEL StrongSwan is not installed
 
 Oracle Linux can enable EPEL with `oracle-epel-release-el9`, and EPEL contains
@@ -84,7 +97,8 @@ curl -fsSL https://raw.githubusercontent.com/louwersj/spinifex/vX.Y.Z/scripts/in
 
 Replace `vX.Y.Z` with a published tag. The helper verifies OL9 and x86_64,
 downloads the selected `setup.sh`, installs the matching GitHub Release asset,
-and starts `spinifex.target`. `SPINIFEX_OL9_NETWORK_SOURCE=oracle` is the
+checks that Oracle's OVS datapath is active, and starts `spinifex.target`.
+`SPINIFEX_OL9_NETWORK_SOURCE=oracle` is the
 default and only accepted source. Rejecting alternate repository values is
 deliberate: it makes an installation reproducible and prevents an unsupported
 mix of EPEL StrongSwan, custom OVS RPMs, and Oracle oVirt RPMs.
