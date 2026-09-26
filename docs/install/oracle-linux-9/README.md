@@ -71,27 +71,30 @@ the host.
 
 ## Install
 
-Run the dedicated helper from a checked-out release, or use it directly from a
-version-pinned GitHub release:
+Use this single command from a version-pinned GitHub Release. It downloads the
+same helper and the same `ol9-amd64` release tarball that an end user receives;
+it does not require cloning the repository, Ansible, EPEL, or a private RPM
+repository:
 
 ```bash
-export INSTALL_SPINIFEX_GITHUB_REPOSITORY='louwersj/spinifex'
-export INSTALL_SPINIFEX_VERSION='vX.Y.Z'
-curl -fsSLO "https://raw.githubusercontent.com/${INSTALL_SPINIFEX_GITHUB_REPOSITORY}/${INSTALL_SPINIFEX_VERSION}/scripts/install-ol9-spinifex.sh"
-chmod 0755 install-ol9-spinifex.sh
-sudo -E ./install-ol9-spinifex.sh
+curl -fsSL https://raw.githubusercontent.com/louwersj/spinifex/vX.Y.Z/scripts/install-ol9-spinifex.sh | \
+  sudo env INSTALL_SPINIFEX_GITHUB_REPOSITORY=louwersj/spinifex \
+  INSTALL_SPINIFEX_VERSION=vX.Y.Z bash
 ```
 
-The helper verifies OL9 and x86_64, downloads the selected `setup.sh`, and
-starts `spinifex.target`. `SPINIFEX_OL9_NETWORK_SOURCE=oracle` is the default
-and only accepted source. Rejecting alternate repository values is deliberate:
-it makes an installation reproducible and prevents an unsupported mix of EPEL
-StrongSwan, custom OVS RPMs, and Oracle oVirt RPMs.
+Replace `vX.Y.Z` with a published tag. The helper verifies OL9 and x86_64,
+downloads the selected `setup.sh`, installs the matching GitHub Release asset,
+and starts `spinifex.target`. `SPINIFEX_OL9_NETWORK_SOURCE=oracle` is the
+default and only accepted source. Rejecting alternate repository values is
+deliberate: it makes an installation reproducible and prevents an unsupported
+mix of EPEL StrongSwan, custom OVS RPMs, and Oracle oVirt RPMs.
 
 For an upstream release, change only the repository value:
 
 ```bash
-export INSTALL_SPINIFEX_GITHUB_REPOSITORY='mulgadc/spinifex'
+curl -fsSL https://raw.githubusercontent.com/mulgadc/spinifex/vX.Y.Z/scripts/install-ol9-spinifex.sh | \
+  sudo env INSTALL_SPINIFEX_GITHUB_REPOSITORY=mulgadc/spinifex \
+  INSTALL_SPINIFEX_VERSION=vX.Y.Z bash
 ```
 
 No script modification is needed when a fork merges upstream; GitHub Actions

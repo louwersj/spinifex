@@ -71,10 +71,14 @@ vm_exists() {
 }
 
 make_seed_iso() {
-    local tmpdir="$1" seed_dir="$tmpdir/cidata" ssh_key="" ssh_password_auth=false
+    local tmpdir="$1" seed_dir="$tmpdir/cidata" ssh_key="" ssh_password_auth=false password_expiry=true
     case "$PVE_ENABLE_ROOT_SSH_PASSWORD_LOGIN" in
         0) ;;
-        1) ssh_password_auth=true ;;
+        # Automated guest testing needs a password that does not force an
+        # interactive change on first SSH login. This exception is constrained
+        # to an explicitly named local disposable-test switch; all default
+        # console-only VMs retain the safer first-login expiry behavior.
+        1) ssh_password_auth=true; password_expiry=false ;;
         *) echo "PVE_ENABLE_ROOT_SSH_PASSWORD_LOGIN must be 0 or 1" >&2; return 2 ;;
     esac
     mkdir -p "$seed_dir"
@@ -92,7 +96,7 @@ manage_etc_hosts: true
 disable_root: false
 ssh_pwauth: ${ssh_password_auth}
 chpasswd:
-  expire: true
+  expire: ${password_expiry}
   users:
     - {name: root, password: '${PVE_ROOT_PASSWORD}', type: text}
 EOF
@@ -107,9 +111,15 @@ runcmd:
   - systemctl enable --now qemu-guest-agent
 EOF
     if [[ "$PVE_ENABLE_ROOT_SSH_PASSWORD_LOGIN" == 1 ]]; then
-        cat >>"$seed_dir/user-data" <<'EOF'
-  # Local-test-only: allow the runner to use the short, expiring root password.
-  - sed -ri 's/^#?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+        cat >>"$seed_dir/user-data" <<EOF
+  # Local-test-only: permit the short disposable root password so the test
+  # runner can execute the same installer an end user receives. A dedicated
+  # early drop-in wins over later cloud-image defaults. Repeat chpasswd here:
+  # this both documents the deliberate test credential and avoids a cloud-init
+  # image variation silently skipping the declarative chpasswd stanza above.
+  - install -d -m 0755 /etc/ssh/sshd_config.d
+  - printf 'PermitRootLogin yes\nPasswordAuthentication yes\n' > /etc/ssh/sshd_config.d/00-spinifex-local-test.conf
+  - printf '%s\n' 'root:${PVE_ROOT_PASSWORD}' | chpasswd
   - systemctl restart sshd
 EOF
     fi
@@ -128,9 +138,10 @@ EOF
 
 create_vm() {
     [[ -n "$PVE_ROOT_PASSWORD" ]] || { echo "Set PVE_ROOT_PASSWORD (it is never printed or stored in the repo)." >&2; exit 2; }
-    # This is intentionally a disposable, console-only test credential. Keep
-    # it short at the request of the local test operator; cloud-init expires it
-    # after the first successful login, and it must never be reused elsewhere.
+    # This is intentionally a disposable test credential. Keep it short at the
+    # request of the local test operator; cloud-init expires it after first use
+    # by default. PVE_ENABLE_ROOT_SSH_PASSWORD_LOGIN=1 is the explicit local
+    # automation exception and must never be used beyond this isolated test VM.
     [[ "$PVE_ROOT_PASSWORD" =~ ^[A-Za-z0-9@%+=.,:_-]{1,8}$ ]] || {
         echo "PVE_ROOT_PASSWORD must be 1-8 characters from A-Za-z0-9@%+=.,:_-" >&2; exit 2;
     }
@@ -162,7 +173,11 @@ create_vm() {
     wait_task "$task"
     response=$(api POST "/nodes/${PVE_NODE}/qemu/${PVE_VM_ID}/status/start")
     wait_task "$(jq -r '.data' <<<"$response")"
-    echo "VM ${PVE_VM_ID} is running. Root password is set to expire on first successful login."
+    if [[ "$PVE_ENABLE_ROOT_SSH_PASSWORD_LOGIN" == 1 ]]; then
+        echo "VM ${PVE_VM_ID} is running. Local-test root password SSH is enabled without first-login expiry."
+    else
+        echo "VM ${PVE_VM_ID} is running. Root password is set to expire on first successful login."
+    fi
 }
 
 destroy_vm() {
