@@ -110,6 +110,19 @@
 
 set -e
 
+# Oracle's packaged ovn-northd unit reads /etc/sysconfig/ovn-northd, while the
+# Debian service contract historically used /etc/default/ovn-central. Record
+# the platform once so the RAFT path below can feed the same options to either
+# packaging layout without adding a second installer or a config manager.
+IS_ORACLE_LINUX_9=false
+if [ -r /etc/os-release ]; then
+    # shellcheck disable=SC1091
+    . /etc/os-release
+    if [ "${ID:-}" = "ol" ] && [ "${VERSION_ID%%.*}" = "9" ]; then
+        IS_ORACLE_LINUX_9=true
+    fi
+fi
+
 # Defaults
 MANAGEMENT=false
 WAN_BRIDGE=""
@@ -338,14 +351,15 @@ echo "  OVN Remote (SB):  $OVN_REMOTE"
 echo "  Encap IP:         $ENCAP_IP"
 echo ""
 
-# Packages (openvswitch-switch, ovn-host, openvswitch-ipsec, strongswan-charon,
-# and ovn-central on management nodes) are baked into the gold image via
-# scripts/tofu-cluster/image-builder/scripts/provision.sh. Runtime apt-get
-# was removed to keep CI off the (flaky) apt-cacher-ng path. If a package is
-# missing, the downstream ovs/ovn commands will fail loudly — the fix is to
-# rebuild the gold image, not to re-add apt-get here.
+# Packages are installed by setup.sh before this script runs. Debian hosts use
+# openvswitch-switch/ovn-host/strongswan-charon; Oracle Linux 9 uses Oracle's
+# versioned openvswitch2.17/ovn22.09 packages plus their required LibreSwan
+# dependency. setup.sh installs a minimal systemd compatibility layer on OL9,
+# so the service names below remain stable across both platforms. If a package
+# is missing, the downstream ovs/ovn commands fail loudly rather than this
+# networking script attempting an unreviewed runtime package installation.
 
-# strongswan-charon ships an AppArmor profile for /usr/lib/ipsec/charon that
+# Debian's strongswan-charon ships an AppArmor profile for /usr/lib/ipsec/charon that
 # only allows reading from /etc/ipsec.*, /etc/strongswan.*, and a few other
 # fixed paths. ovs-monitor-ipsec writes the per-tunnel strongSwan config with
 # absolute paths to our peer cert + key under /etc/spinifex/ipsec/ AND to the
@@ -462,6 +476,21 @@ if [ "$MANAGEMENT" = true ]; then
         echo "OVN_CTL_OPTS=\"$OVN_CTL_OPTS\"" | sudo tee /etc/default/ovn-central >/dev/null
         echo "  wrote /etc/default/ovn-central"
 
+        # Oracle's native ovn-northd.service is used for the clustered path.
+        # It reads OVN_NORTHD_OPTS from /etc/sysconfig/ovn-northd rather than
+        # Debian's /etc/default/ovn-central, so mirror the exact cluster
+        # options there and tell northd that the two compatibility DB units
+        # own the database processes. Without this file a multi-node OL9
+        # deployment would start northd against its local default sockets and
+        # silently ignore the requested RAFT member list.
+        if [ "$IS_ORACLE_LINUX_9" = true ]; then
+            {
+                echo "# Managed by Spinifex setup-ovn.sh for Oracle Linux 9 RAFT."
+                echo "OVN_NORTHD_OPTS=\"--ovn-manage-ovsdb=no $OVN_CTL_OPTS\""
+            } | sudo tee /etc/sysconfig/ovn-northd >/dev/null
+            echo "  wrote /etc/sysconfig/ovn-northd (Oracle Linux 9 RAFT options)"
+        fi
+
         # The packaged ovn-northd.service ExecStop runs `ovn-ctl stop_northd`
         # without --ovn-manage-ovsdb=no, so restarting northd also tears down the
         # NB/SB ovsdb-server units. With the split clustered units those DBs are
@@ -488,6 +517,15 @@ EOF
         # peer that no longer exists, which looks like a hung leader election.
         echo "OVN_CTL_OPTS=\"$OVN_DB_LISTEN_OPTS\"" | sudo tee /etc/default/ovn-central >/dev/null
         echo "  wrote /etc/default/ovn-central"
+        # Remove only the compatibility file we own when returning a former
+        # clustered OL9 node to standalone operation. The central wrapper now
+        # owns northd and its NB/SB databases, so stale RAFT flags here would
+        # affect a manually started native ovn-northd service later.
+        if [ "$IS_ORACLE_LINUX_9" = true ] && \
+            sudo grep -q '^# Managed by Spinifex setup-ovn.sh for Oracle Linux 9 RAFT\.$' /etc/sysconfig/ovn-northd 2>/dev/null; then
+            sudo rm -f /etc/sysconfig/ovn-northd
+            echo "  removed stale Oracle Linux 9 RAFT options"
+        fi
         sudo systemctl start ovn-central
 
         # ovn-central is ExecStart=/bin/true; restarting it does not restart
@@ -1295,15 +1333,16 @@ echo ""
 echo "Step 10: Enabling OVN auto-start on boot..."
 sudo systemctl enable openvswitch-switch 2>/dev/null || true
 sudo systemctl enable ovn-controller 2>/dev/null || true
-# ovs-monitor-ipsec drives strongSwan from OVS DB cert pointers. The daemon's
+# ovs-monitor-ipsec drives the distro-provided IPsec implementation from OVS DB
+# cert pointers. Debian uses StrongSwan; Oracle's OVS RPM requires LibreSwan.
+# The daemon's
 # enableOVNIPSec() flips ipsec_encapsulation=true at runtime and silently drops
 # tunnel traffic if this unit isn't already up — enable at provision time so
 # daemon never needs systemd-write capability (only is-active read).
 sudo systemctl enable openvswitch-ipsec.service 2>/dev/null || true
-# When openvswitch-ipsec is installed before strongswan-starter, the deb
-# post-install starts the service against a missing /usr/sbin/ipsec and
-# leaves it in 'failed' state. Clear the failure and restart unconditionally
-# now that strongswan-starter is present.
+# Debian can install openvswitch-ipsec before StrongSwan, while Oracle installs
+# its required LibreSwan dependency in the same DNF transaction. In both cases
+# clear a stale package-install failure before the explicit, final restart.
 sudo systemctl reset-failed openvswitch-ipsec.service 2>/dev/null || true
 sudo systemctl restart openvswitch-ipsec.service 2>/dev/null || true
 echo "  openvswitch-switch:   enabled on boot"

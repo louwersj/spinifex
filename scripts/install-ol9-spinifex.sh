@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Fully automated Oracle Linux 9 Spinifex installation and service start.
 # Contributed by Johan Louwers. This is a thin, auditable wrapper around the
-# production setup.sh: it validates the OL9-only safety contract, then leaves
-# users, packages, units, and firewall setup to the single supported installer.
+# production setup.sh: it validates the OL9-only architecture contract, then
+# leaves users, Oracle-signed packages, units, and firewall setup to the single
+# supported installer. It needs no private RPM repository, EPEL, or Ansible.
 set -euo pipefail
 
 if [[ ${EUID} -ne 0 ]]; then
@@ -16,13 +17,19 @@ if [[ ${ID:-} != ol || ${VERSION_ID%%.*} != 9 ]]; then
     exit 2
 fi
 
-: "${SPINIFEX_OL9_NETWORK_REPO_URL:?set the HTTPS signed network RPM repository URL}"
-: "${SPINIFEX_OL9_NETWORK_REPO_GPGKEY_URL:?set the HTTPS repository GPG key URL}"
+if [[ $(uname -m) != x86_64 ]]; then
+    echo "Oracle's OVS/OVN oVirt repository is currently published only for x86_64." >&2
+    exit 2
+fi
 
-case "$SPINIFEX_OL9_NETWORK_REPO_URL,$SPINIFEX_OL9_NETWORK_REPO_GPGKEY_URL" in
-    https://*,https://*) ;;
-    *) echo "OL9 network repository and GPG key URLs must use HTTPS." >&2; exit 2 ;;
-esac
+# Be deliberately strict rather than silently honouring old private-repository
+# variables. The supported path is fully reproducible from Oracle's signed RPM
+# repositories, which is important for installations from either a fork or the
+# upstream project.
+if [[ ${SPINIFEX_OL9_NETWORK_SOURCE:-oracle} != oracle ]]; then
+    echo "SPINIFEX_OL9_NETWORK_SOURCE must be 'oracle'." >&2
+    exit 2
+fi
 
 SPINIFEX_RELEASE_REPOSITORY="${INSTALL_SPINIFEX_GITHUB_REPOSITORY:-mulgadc/spinifex}"
 SPINIFEX_RELEASE_REF="${INSTALL_SPINIFEX_VERSION:-main}"
@@ -35,8 +42,9 @@ installer="$tmpdir/setup.sh"
 curl --fail --silent --show-error --location "$SPINIFEX_INSTALLER_URL" --output "$installer"
 chmod 0700 "$installer"
 
-# setup.sh consumes INSTALL_SPINIFEX_* and SPINIFEX_OL9_NETWORK_REPO_* directly.
-# It installs the selected release, writes systemd units, and starts the target.
+# setup.sh consumes INSTALL_SPINIFEX_* directly. It installs the selected
+# release, enables the Oracle oVirt RPM repositories, writes compatibility
+# units, and starts the target.
 bash "$installer"
 systemctl enable --now spinifex.target
 systemctl is-active --quiet spinifex.target

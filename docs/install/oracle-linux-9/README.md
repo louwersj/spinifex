@@ -1,7 +1,7 @@
 ---
 title: "Oracle Linux 9"
-seoTitle: "Deploy Spinifex Securely on Oracle Linux 9 — Spinifex Docs"
-description: "Deploy Spinifex on Oracle Linux 9 hosts with the signed network runtime repository, repeatable release checks, and required virtual-machine validation."
+seoTitle: "Deploy Spinifex on Oracle Linux 9 — Spinifex Docs"
+description: "Deploy Spinifex on x86_64 Oracle Linux 9 with Oracle-signed RPM repositories and a shell-only installer."
 category: "Install"
 tags:
   - install
@@ -12,130 +12,110 @@ tags:
 
 # Oracle Linux 9 deployment
 
-> Contribution note — Johan Louwers added this deployment path, its fork-aware
-> release guidance, and its explicit signed network-runtime safety boundary.
+> Contribution note — Johan Louwers added the Oracle Linux 9 deployment,
+> container validation, Proxmox VM utility, and the documented compatibility
+> layer that keeps the existing Spinifex service contract portable.
 
-Spinifex supports Oracle Linux 9 hosts only when they are supplied with the
-Spinifex OL9 network-runtime repository. This is deliberate: stock Oracle
-Linux 9 does not publish a production-supported Open vSwitch/OVN package set
-that satisfies Spinifex's service and IPsec requirements.
+Spinifex supports **x86_64 Oracle Linux 9** using only Oracle-signed RPM
+repositories and shell scripts. The installation does not need a Spinifex RPM
+repository, EPEL, Ansible, or another configuration-management product.
 
-## Why a separate repository is required
+## Package sources and the minimal dependency set
 
-The regular Oracle Linux 9 repositories contain the base host dependencies
-used by Spinifex: KVM, libvirt, nbdkit, firmware, networking utilities, and
-system services. They do not contain compatible `openvswitch`, `ovn`, and
-`strongswan` packages. `nbdkit-devel` is available only from CodeReady Builder,
-which Oracle marks unsupported; it is used only in the release builder to
-compile the bundled nbdkit plugin and is never enabled on a deployed host.
+The normal Oracle Linux 9 BaseOS and Application Stream repositories provide
+the host tools: KVM, libvirt, nbdkit, firmware, networking utilities, and
+system services. The installer writes a minimal DNF definition for the public,
+Oracle-signed oVirt 4.5 repositories and uses Oracle's preinstalled RPM key.
+It deliberately avoids Oracle's general-purpose `oracle-ovirt-release-45-el9`
+configuration RPM because that RPM also pulls UEK netfilter modules intended
+for Oracle VM Manager hosts. The Oracle repositories supply this networking set:
 
-Oracle's Developer/EPEL and oVirt repositories must not be enabled by the
-installer. Oracle documents those repositories as development or unsupported,
-and their OVS/OVN package names, versions, and systemd units are not a stable
-match for Spinifex.
-
-The network repository is therefore a release artifact owned by the Spinifex
-release process. It keeps the deployed networking stack versioned, signed,
-tested and independently updatable from the host operating system.
-
-## Repository contract
-
-Before declaring an OL9 release deployable, publish an HTTPS RPM repository
-with signed metadata and signed RPMs for the supported OL9 architecture. It
-must provide the following package names:
-
-| Package | Required contents |
+| Purpose | Oracle package |
 | --- | --- |
-| `openvswitch` | `ovs-vsctl`, `ovs-appctl`, `ovs-vswitchd`, and the `openvswitch-switch.service` and `openvswitch-ipsec.service` units |
-| `ovn` | `ovn-nbctl`, `ovn-sbctl`, `ovn-controller`, `ovn-northd`, and the `ovn-controller.service`, `ovn-central.service`, `ovn-northd.service`, `ovn-ovsdb-server-nb.service`, and `ovn-ovsdb-server-sb.service` units |
-| `strongswan` | `/usr/sbin/ipsec` and the strongSwan starter components used by `openvswitch-ipsec` |
+| Open vSwitch | `openvswitch2.17` |
+| OVS IPsec helper | `openvswitch2.17-ipsec` |
+| OVN central services | `ovn22.09-central` |
+| OVN host/controller | `ovn22.09-host` |
+| IPsec implementation | `libreswan` |
 
-The packages must be built for OL9, pinned as a compatible OVS/OVN/strongSwan
-set, and tested together. Do not mix packages from Fedora EPEL, oVirt, or a
-different Enterprise Linux release. The repository must retain the RPMs for
-every supported Spinifex release so existing hosts can reproduce an upgrade.
+The versioned names are intentional. They prevent a later, unrelated package
+from silently becoming the installed network stack. The installer asks DNF to
+verify Oracle's RPM signatures; it writes only the two Oracle oVirt endpoints
+and does not import a custom key.
 
-The public signing key must be served over HTTPS. Rotate the key through a new
-repository release and test it before changing the installation instructions.
+### Why EPEL StrongSwan is not installed
 
-## Installing
+Oracle Linux can enable EPEL with `oracle-epel-release-el9`, and EPEL contains
+StrongSwan. It is not compatible with the Oracle oVirt OVS IPsec RPM used by
+Spinifex: `openvswitch2.17-ipsec` declares a dependency on LibreSwan, and both
+LibreSwan and StrongSwan provide `/usr/sbin/ipsec`. Installing both is a DNF
+file conflict, not a safe fallback. The supported minimal path therefore uses
+the LibreSwan package required by Oracle's own OVS RPM and leaves EPEL disabled.
 
-Obtain the repository URL and its public-key URL from the release manifest,
-then run the normal installer with both values. They are intentionally required
-as a pair:
+### Service-name compatibility
 
-```bash
-export SPINIFEX_OL9_NETWORK_REPO_URL='https://packages.example.com/spinifex/ol9/x86_64'
-export SPINIFEX_OL9_NETWORK_REPO_GPGKEY_URL='https://packages.example.com/spinifex/RPM-GPG-KEY-spinifex'
-curl -fsSL https://install.mulgadc.com | sudo -E bash
-```
+Oracle names the OVS service `openvswitch.service` and distributes OVN
+components differently from Debian. `scripts/setup.sh` writes only three tiny
+local systemd adapters on OL9:
 
-The installer writes `/etc/yum.repos.d/spinifex-network.repo` with both RPM and
-repository-metadata signature checks enabled, then installs the base OL9 and
-network-runtime packages. It refuses to continue if either value is absent or
-does not use HTTPS. For an air-gapped deployment, mirror the signed repository
-inside the environment and use that internal HTTPS endpoint.
+| Existing Spinifex name | Oracle-backed implementation |
+| --- | --- |
+| `openvswitch-switch.service` | Alias of Oracle's `openvswitch.service` |
+| `ovn-central.service` | Calls Oracle's `/usr/share/ovn/scripts/ovn-ctl start_northd` |
+| `ovn-ovsdb-server-nb.service`, `ovn-ovsdb-server-sb.service` | Call Oracle's `ovn-ctl` NB/SB database commands |
 
-The release tarball for OL9 contains an nbdkit plugin compiled against OL9's
-glibc and nbdkit ABI. Use the `ol9-amd64` tarball, not a Debian/Ubuntu tarball.
+They add no daemon and no external tool. They preserve the service names used
+by `setup-ovn.sh`, including its existing single-node and RAFT lifecycle
+logic, while Oracle's packaged binaries remain the only OVS/OVN binaries on
+the host.
 
-### GitHub fork and upstream releases
+## Install
 
-The installer can download a version-pinned release directly from whichever
-GitHub repository produced it. This avoids hard-coding a fork name in either
-the installer or release workflow. For the current fork:
+Run the dedicated helper from a checked-out release, or use it directly from a
+version-pinned GitHub release:
 
 ```bash
 export INSTALL_SPINIFEX_GITHUB_REPOSITORY='louwersj/spinifex'
 export INSTALL_SPINIFEX_VERSION='vX.Y.Z'
-curl -fsSL https://raw.githubusercontent.com/louwersj/spinifex/vX.Y.Z/scripts/setup.sh | sudo -E bash
+curl -fsSLO "https://raw.githubusercontent.com/${INSTALL_SPINIFEX_GITHUB_REPOSITORY}/${INSTALL_SPINIFEX_VERSION}/scripts/install-ol9-spinifex.sh"
+chmod 0755 install-ol9-spinifex.sh
+sudo -E ./install-ol9-spinifex.sh
 ```
 
-When the same change is released upstream, change only the environment value
-to `mulgadc/spinifex`; no installer or workflow edit is required. GitHub
-Actions supplies its active repository as `github.repository` when it creates
-the release, so the release artifacts follow the fork automatically.
+The helper verifies OL9 and x86_64, downloads the selected `setup.sh`, and
+starts `spinifex.target`. `SPINIFEX_OL9_NETWORK_SOURCE=oracle` is the default
+and only accepted source. Rejecting alternate repository values is deliberate:
+it makes an installation reproducible and prevents an unsupported mix of EPEL
+StrongSwan, custom OVS RPMs, and Oracle oVirt RPMs.
 
-### What happens when this is merged upstream
+For an upstream release, change only the repository value:
 
-Merging this feature from a fork into `mulgadc/spinifex` does not change or
-invalidate fork installations. The release workflow always uploads artifacts
-to the repository in which it runs:
+```bash
+export INSTALL_SPINIFEX_GITHUB_REPOSITORY='mulgadc/spinifex'
+```
 
-| Release source | Installer value |
-| --- | --- |
-| Fork release | `INSTALL_SPINIFEX_GITHUB_REPOSITORY=louwersj/spinifex` |
-| Official release | `INSTALL_SPINIFEX_GITHUB_REPOSITORY=mulgadc/spinifex` |
+No script modification is needed when a fork merges upstream; GitHub Actions
+uses the repository in which the release workflow runs.
 
-Existing installs that use `install.mulgadc.com` continue unchanged. A user
-chooses a GitHub source only when they deliberately set
-`INSTALL_SPINIFEX_GITHUB_REPOSITORY` and a version tag.
+After installation, configure the networking plane:
 
-For Oracle Linux, the signed network-runtime bundle/repository must come from
-the same release source as the Spinifex tarball. Do not combine a fork's
-tarball with an upstream bundle, or the reverse, unless that exact pair was
-published and VM-tested together. This prevents an unreviewed mix of OVS/OVN,
-strongSwan, nbdkit plugin, and service-unit versions.
+```bash
+sudo /usr/local/share/spinifex/setup-ovn.sh --management
+```
 
-## Release and test gates
+## Validation gates
 
-Container checks have a deliberately limited role:
+The repository contains two complementary checks:
 
-1. `scripts/lint-dnf-packages.sh oraclelinux:9` resolves every base package
-   against a clean stock Oracle Linux 9 image.
-2. `scripts/setup_platform_test.sh` verifies OS selection and that the
-   installer refuses an unsigned or unspecified network source.
-3. `make distro-ol9-amd64` compiles the nbdkit plugin in an OL9 builder.
+1. `scripts/setup_platform_test.sh` verifies OS selection, the x86_64 Oracle
+   source policy, and fork-aware release URLs without mutating the host.
+2. `scripts/lint-dnf-packages.sh oraclelinux:9` runs an x86_64 OL9 container,
+   configures the same public Oracle oVirt endpoints, and resolves every
+   declared package.
 
-They cannot start KVM, systemd, Open vSwitch or an OVN datapath. Each release
-must additionally pass a clean OL9 VM test using the exact signed repository:
-
-1. Install via the two environment variables above.
-2. Run `sudo /usr/local/share/spinifex/setup-ovn.sh --management`.
-3. Create a cluster and launch a guest; verify DHCP, Geneve forwarding, OVN
-   northbound/southbound connectivity, and IPsec when enabled.
-4. Reboot the node and repeat the service and guest-network checks.
-5. Upgrade from the prior supported OL9 release and repeat the checks.
-
-Until that VM gate has passed for a specific repository release, it must not be
-advertised as production-ready.
+Container tests cannot start systemd, KVM, OVS, or an OVN datapath. Before a
+release is promoted, use `scripts/proxmox-ol9-test-vm.sh` to create a clean OL9
+VM, run this same installer, configure `setup-ovn.sh --management`, launch a
+guest, verify DHCP/Geneve/OVN connectivity and IPsec, reboot, and repeat the
+checks. Repeat the same VM gate after changes to the OL9 package list or the
+compatibility units.

@@ -148,9 +148,10 @@ Every AWS API call is authenticated at the gateway, published to a NATS subject,
 
 ## Self-hosted Installation
 
-Installation supports Ubuntu 26.04 and Debian 13. Oracle Linux 9 support was
-contributed by Johan Louwers and is supported
-when its signed Spinifex network-runtime repository is supplied; see the
+Installation supports Ubuntu 26.04, Debian 13, and x86_64 Oracle Linux 9.
+Oracle Linux 9 support was contributed by Johan Louwers and uses only
+Oracle-signed repositories plus the shell installer—no private Spinifex RPM
+repository, EPEL, or Ansible is required. See the
 [Oracle Linux 9 deployment guide](docs/install/oracle-linux-9/README.md).
 See [docs.mulgadc.com](https://docs.mulgadc.com) for the full installation
 documentation.

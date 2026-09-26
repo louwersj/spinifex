@@ -26,12 +26,14 @@ run_case debian $'ID=debian\nVERSION_ID=13\nPRETTY_NAME="Debian 13"' 'debian:amd
 run_case ubuntu $'ID=ubuntu\nVERSION_ID=24.04\nPRETTY_NAME="Ubuntu 24.04"' 'debian:amd64:qemu-system-x86'
 run_case ol9 $'ID=ol\nVERSION_ID=9.6\nPRETTY_NAME="Oracle Linux Server 9.6"' 'ol9:amd64:qemu-kvm'
 
-repo_contract_case() {
+ol9_source_case() {
+    # Keep this test free of DNF mutations: it verifies the installer accepts
+    # only the explicit, reproducible Oracle repository source.
     local name="$1" expected="$2"
     shift 2
-    if out=$(env INSTALL_SPINIFEX_LIB_ONLY=1 "$@" \
-        bash -c '. "$1/setup.sh"; configure_ol9_network_repo' _ "$SCRIPT_DIR" 2>&1); then
-        echo "FAIL: $name: repository configuration unexpectedly succeeded" >&2
+    if ! out=$(env INSTALL_SPINIFEX_LIB_ONLY=1 "$@" \
+        bash -c 'dnf() { :; }; ARCH=amd64; . "$1/setup.sh"; configure_ol9_network_repositories; printf ok' _ "$SCRIPT_DIR" 2>&1); then
+        echo "FAIL: $name: source validation failed: $out" >&2
         exit 1
     fi
     case "$out" in
@@ -40,9 +42,21 @@ repo_contract_case() {
     esac
 }
 
-repo_contract_case ol9-repo-url SPINIFEX_OL9_NETWORK_REPO_URL
-repo_contract_case ol9-repo-key SPINIFEX_OL9_NETWORK_REPO_GPGKEY_URL \
-    SPINIFEX_OL9_NETWORK_REPO_URL=https://packages.example.invalid/ol9/x86_64
+# The command declares a harmless dnf shell function because this is a
+# source-policy test, not the container-level package-resolution test above.
+ol9_source_case ol9-oracle-source ok \
+    OL9_YUM_REPOS_DIR="$TMPDIR/yum.repos.d" \
+    SPINIFEX_OL9_NETWORK_SOURCE=oracle
+
+if out=$(env INSTALL_SPINIFEX_LIB_ONLY=1 SPINIFEX_OL9_NETWORK_SOURCE=epel \
+    bash -c 'ARCH=amd64; . "$1/setup.sh"; configure_ol9_network_repositories' _ "$SCRIPT_DIR" 2>&1); then
+    echo "FAIL: ol9-non-oracle-source: source validation unexpectedly succeeded" >&2
+    exit 1
+fi
+case "$out" in
+    *"SPINIFEX_OL9_NETWORK_SOURCE"*) ;;
+    *) echo "FAIL: ol9-non-oracle-source: wanted source error, got: $out" >&2; exit 1 ;;
+esac
 
 github_release_url_case() {
     local name="$1" expected="$2" family="$3" arch="$4"
@@ -70,4 +84,4 @@ github_release_url_case github-upstream-ol9 \
     INSTALL_SPINIFEX_GITHUB_REPOSITORY=mulgadc/spinifex \
     INSTALL_SPINIFEX_VERSION=v1.2.3
 
-echo "OK: platform selection, Oracle Linux 9 repository contract, and fork-aware GitHub release URLs"
+echo "OK: platform selection, Oracle Linux 9 Oracle-repository policy, and fork-aware GitHub release URLs"

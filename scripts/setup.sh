@@ -17,13 +17,13 @@
 #                             to https://github.com (GitHub Enterprise only).
 #   INSTALL_SPINIFEX_SKIP_DEPS Set to 1 to skip system dependency install
 #   INSTALL_SPINIFEX_SKIP_APT  Deprecated alias for INSTALL_SPINIFEX_SKIP_DEPS
-#   SPINIFEX_OL9_NETWORK_REPO_URL
-#                             HTTPS URL of the signed RPM repository containing
-#                             the OL9-compatible Spinifex OVS/OVN runtime.
-#                             Required only on Oracle Linux 9.
-#   SPINIFEX_OL9_NETWORK_REPO_GPGKEY_URL
-#                             HTTPS URL of that repository's public signing key.
-#                             Required together with the repository URL on OL9.
+#   SPINIFEX_OL9_NETWORK_SOURCE
+#                             Oracle Linux 9 network source. Only "oracle" is
+#                             supported (and is the default). It installs the
+#                             Oracle-signed oVirt 4.5 OVS/OVN packages and the
+#                             matching LibreSwan IPsec dependency; no private
+#                             RPM repository, EPEL repository, Ansible, or
+#                             other configuration manager is required.
 #   INSTALL_SPINIFEX_SKIP_AWS  Set to 1 to skip AWS CLI install
 #   INSTALL_SPINIFEX_SKIP_NEWGRP  Set to 1 to skip newgrp exec at end (for callers like dev-install.sh)
 #   ISO_BUILD                  Set to 1 when running inside a debootstrap chroot from the ISO
@@ -312,9 +312,10 @@ fi
 # and disabling a unit that also ships a SysV script shells out to update-rc.d
 # there and fails. Masking is done by PID 1 over D-Bus and is unaffected.
 
-# ovs-monitor-ipsec execs the strongSwan starter itself rather than going through
-# this unit, so leaving it enabled only contends for UDP 500/4500. Off in both
-# states. Absent on a host without strongswan, which is not an error.
+# Debian's ovs-monitor-ipsec starts strongSwan itself rather than through this
+# unit, so leaving the standalone starter enabled contends for UDP 500/4500.
+# Oracle Linux uses the LibreSwan dependency of its OVS RPM and has no such
+# unit; the tolerant mask keeps this helper portable without adding a branch.
 systemctl mask --now strongswan-starter.service >/dev/null 2>&1 || true
 
 case "$1" in
@@ -786,10 +787,9 @@ jq curl iproute2 ethtool netcat-openbsd wget unzip xz-utils file
 ovn-central ovn-host openvswitch-switch openvswitch-ipsec strongswan-charon dhcpcd-base
 chrony nftables"
 
-# Oracle's supported OL9 repositories provide this base set. Keep it separate
-# from the network runtime: Oracle does not publish a supported OL9 OVS/OVN
-# package set with the service contract Spinifex needs. See
-# docs/install/oracle-linux-9/README.md before changing either list.
+# Oracle's standard OL9 repositories provide this base host set. Keep it
+# separate from the OVS/OVN stack below so the DNF test can identify a package
+# regression in either layer precisely.
 OL9_BASE_RUNTIME_PACKAGES="nbdkit
 qemu-img edk2-ovmf libvirt
 pciutils
@@ -797,40 +797,130 @@ jq curl iproute ethtool nmap-ncat wget unzip xz file
 dhcp-client
 chrony nftables NetworkManager"
 
-# These packages are intentionally resolved only from the explicitly supplied
-# Spinifex network repository. Do not replace this with Oracle's Developer,
-# EPEL, or oVirt repositories: Oracle labels those sources non-production and
-# their packages do not provide this project's expected service layout.
-OL9_NETWORK_RUNTIME_PACKAGES="openvswitch ovn strongswan"
+# The Oracle oVirt 4.5 repository deliberately uses versioned package names.
+# Pinning the names here is more explicit than accepting any package that
+# happens to provide an `ovn` binary, and lets the container test fail as soon
+# as Oracle changes or withdraws that repository contract.
+#
+# `openvswitch2.17-ipsec` requires LibreSwan. Do not substitute EPEL StrongSwan:
+# both implementations own `/usr/sbin/ipsec`, and DNF quite
+# correctly refuses to install them together. LibreSwan is therefore the
+# smallest compatible IPsec dependency for Oracle's OVS package.
+OL9_NETWORK_RUNTIME_PACKAGES="openvswitch2.17 openvswitch2.17-ipsec
+ovn22.09-central ovn22.09-host libreswan"
+# Test-only override keeps platform-policy coverage unprivileged. Production
+# always uses the DNF convention below because this variable is unset.
+OL9_YUM_REPOS_DIR="${OL9_YUM_REPOS_DIR:-/etc/yum.repos.d}"
 
-configure_ol9_network_repo() {
-    local repo_url="${SPINIFEX_OL9_NETWORK_REPO_URL:-}"
-    local key_url="${SPINIFEX_OL9_NETWORK_REPO_GPGKEY_URL:-}"
+configure_ol9_network_repositories() {
+    local source="${SPINIFEX_OL9_NETWORK_SOURCE:-oracle}"
 
-    [ -n "$repo_url" ] || fatal "Oracle Linux 9 requires SPINIFEX_OL9_NETWORK_REPO_URL; see docs/install/oracle-linux-9/README.md"
-    [ -n "$key_url" ] || fatal "Oracle Linux 9 requires SPINIFEX_OL9_NETWORK_REPO_GPGKEY_URL; see docs/install/oracle-linux-9/README.md"
+    # Oracle publishes this oVirt repository only for x86_64. Failing before
+    # any DNF mutation gives ARM hosts an actionable answer instead of an
+    # opaque package-not-found error.
+    [ "${ARCH:-}" = "amd64" ] || fatal "Oracle Linux 9 networking currently requires x86_64 (detected ${ARCH:-unknown})"
 
-    case "$repo_url" in
-        https://*) ;;
-        *) fatal "SPINIFEX_OL9_NETWORK_REPO_URL must use HTTPS" ;;
+    case "$source" in
+        oracle) ;;
+        *) fatal "SPINIFEX_OL9_NETWORK_SOURCE must be 'oracle'; private RPM and EPEL sources are intentionally unsupported" ;;
     esac
-    case "$key_url" in
-        https://*) ;;
-        *) fatal "SPINIFEX_OL9_NETWORK_REPO_GPGKEY_URL must use HTTPS" ;;
-    esac
 
-    # Keep this source isolated, named and signature-enforced. Its RPMs must
-    # provide the packages and systemd units documented for the OL9 runtime.
-    $SUDO install -d -m 0755 /etc/yum.repos.d
-    $SUDO tee /etc/yum.repos.d/spinifex-network.repo >/dev/null <<EOF
-[spinifex-network]
-name=Spinifex OL9 network runtime
-baseurl=${repo_url}
+    # Do not install oracle-ovirt-release-45-el9 just to obtain this two-line
+    # repository definition. That convenience RPM also depends on UEK netfilter
+    # modules intended for an Oracle VM Manager host, which makes an otherwise
+    # minimal Spinifex installation download an unnecessary kernel payload.
+    #
+    # The URLs and key below are the values from Oracle's own release RPM. The
+    # key is already installed by oraclelinux-release, so this adds no key and
+    # no third-party repository—only an explicit pointer to Oracle's signed
+    # oVirt 4.5 package endpoints.
+    $SUDO install -d -m 0755 "$OL9_YUM_REPOS_DIR"
+    $SUDO tee "$OL9_YUM_REPOS_DIR/spinifex-oracle-ovirt45.repo" >/dev/null <<'EOF'
+[spinifex-oracle-ovirt-4.5]
+name=Oracle Linux 9 oVirt 4.5 for Spinifex ($basearch)
+baseurl=https://yum.oracle.com/repo/OracleLinux/OL9/ovirt45/$basearch/
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-oracle
 enabled=1
 gpgcheck=1
-repo_gpgcheck=1
-gpgkey=${key_url}
+
+[spinifex-oracle-ovirt-4.5-extra]
+name=Oracle Linux 9 oVirt 4.5 Extra for Spinifex ($basearch)
+baseurl=https://yum.oracle.com/repo/OracleLinux/OL9/ovirt45/extras/$basearch/
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-oracle
+enabled=1
+gpgcheck=1
 EOF
+}
+
+install_ol9_service_compatibility() {
+    # Spinifex was originally written against Debian's service names. Oracle's
+    # RPMs provide the same daemons but name their aggregate OVS service
+    # `openvswitch.service` and do not ship Debian's ovn-central/OVSDB wrapper
+    # units. These tiny local units are adapters only: their ExecStart lines
+    # invoke Oracle's packaged ovn-ctl and add no daemon or third-party tool.
+    [ "${PLATFORM_FAMILY:-}" = "ol9" ] || return 0
+
+    $SUDO install -d -m 0755 /etc/systemd/system
+
+    # A symlink is a true systemd alias, so start/stop/enable calls made by
+    # existing scripts affect Oracle's real openvswitch.service directly.
+    $SUDO ln -sfn /usr/lib/systemd/system/openvswitch.service /etc/systemd/system/openvswitch-switch.service
+
+    # The three units below keep the established Spinifex lifecycle contract:
+    # ovn-central owns a standalone NB/SB pair plus northd; the split DB units
+    # let setup-ovn.sh convert a fresh host to RAFT without replacing Oracle
+    # binaries. `/etc/default/ovn-central` is intentionally sourced because
+    # setup-ovn.sh already writes its cluster/listener options there.
+    $SUDO tee /etc/systemd/system/ovn-central.service >/dev/null <<'EOF'
+[Unit]
+# Spinifex Oracle Linux 9 compatibility wrapper; maintained by Johan Louwers.
+Description=Spinifex OVN central compatibility service
+Requires=openvswitch.service
+After=openvswitch.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+Environment=OVN_RUNDIR=/run/ovn OVN_DBDIR=/var/lib/ovn
+EnvironmentFile=-/etc/default/ovn-central
+ExecStart=/bin/sh -c 'exec /usr/share/ovn/scripts/ovn-ctl ${OVN_CTL_OPTS:-} start_northd'
+ExecStop=/bin/sh -c 'exec /usr/share/ovn/scripts/ovn-ctl ${OVN_CTL_OPTS:-} stop_northd'
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    $SUDO tee /etc/systemd/system/ovn-ovsdb-server-nb.service >/dev/null <<'EOF'
+[Unit]
+# Spinifex Oracle Linux 9 compatibility wrapper; maintained by Johan Louwers.
+Description=Spinifex OVN northbound OVSDB compatibility service
+Requires=openvswitch.service
+After=openvswitch.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+Environment=OVN_RUNDIR=/run/ovn OVN_DBDIR=/var/lib/ovn
+EnvironmentFile=-/etc/default/ovn-central
+ExecStart=/bin/sh -c 'exec /usr/share/ovn/scripts/ovn-ctl ${OVN_CTL_OPTS:-} start_nb_ovsdb'
+ExecStop=/bin/sh -c 'exec /usr/share/ovn/scripts/ovn-ctl ${OVN_CTL_OPTS:-} stop_nb_ovsdb'
+EOF
+    $SUDO tee /etc/systemd/system/ovn-ovsdb-server-sb.service >/dev/null <<'EOF'
+[Unit]
+# Spinifex Oracle Linux 9 compatibility wrapper; maintained by Johan Louwers.
+Description=Spinifex OVN southbound OVSDB compatibility service
+Requires=openvswitch.service
+After=openvswitch.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+Environment=OVN_RUNDIR=/run/ovn OVN_DBDIR=/var/lib/ovn
+EnvironmentFile=-/etc/default/ovn-central
+ExecStart=/bin/sh -c 'exec /usr/share/ovn/scripts/ovn-ctl ${OVN_CTL_OPTS:-} start_sb_ovsdb'
+ExecStop=/bin/sh -c 'exec /usr/share/ovn/scripts/ovn-ctl ${OVN_CTL_OPTS:-} stop_sb_ovsdb'
+EOF
+
+    $SUDO systemctl daemon-reload
 }
 
 install_system_deps() {
@@ -857,10 +947,11 @@ install_system_deps() {
                 fi
                 ;;
             ol9)
-                configure_ol9_network_repo
+                configure_ol9_network_repositories
                 # Unquoted on purpose: both variables are whitespace-separated package lists.
                 # shellcheck disable=SC2086
                 $SUDO dnf install -y $QEMU_PACKAGES $OL9_BASE_RUNTIME_PACKAGES $OL9_NETWORK_RUNTIME_PACKAGES
+                install_ol9_service_compatibility
                 ;;
             *)
                 fatal "Internal error: no dependency installer for ${PLATFORM_FAMILY:-unknown}"
