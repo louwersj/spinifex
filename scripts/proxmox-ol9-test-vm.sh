@@ -112,8 +112,11 @@ EOF
 
 create_vm() {
     [[ -n "$PVE_ROOT_PASSWORD" ]] || { echo "Set PVE_ROOT_PASSWORD (it is never printed or stored in the repo)." >&2; exit 2; }
-    [[ "$PVE_ROOT_PASSWORD" =~ ^[A-Za-z0-9@%+=.,:_-]{12,128}$ ]] || {
-        echo "PVE_ROOT_PASSWORD must be 12-128 characters from A-Za-z0-9@%+=.,:_-" >&2; exit 2;
+    # This is intentionally a disposable, console-only test credential. Keep
+    # it short at the request of the local test operator; cloud-init expires it
+    # after the first successful login, and it must never be reused elsewhere.
+    [[ "$PVE_ROOT_PASSWORD" =~ ^[A-Za-z0-9@%+=.,:_-]{1,8}$ ]] || {
+        echo "PVE_ROOT_PASSWORD must be 1-8 characters from A-Za-z0-9@%+=.,:_-" >&2; exit 2;
     }
     vm_exists && { echo "Refusing to replace existing VM ${PVE_VM_ID}; run '$0 destroy' explicitly first." >&2; exit 1; }
 
