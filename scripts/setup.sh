@@ -923,9 +923,14 @@ After=openvswitch.service
 Type=oneshot
 RemainAfterExit=yes
 Environment=OVN_RUNDIR=/run/ovn OVN_DBDIR=/var/lib/ovn
+EnvironmentFile=-/etc/sysconfig/ovn
 EnvironmentFile=-/etc/default/ovn-central
-ExecStart=/bin/sh -c 'exec /usr/share/ovn/scripts/ovn-ctl ${OVN_CTL_OPTS:-} start_northd'
-ExecStop=/bin/sh -c 'exec /usr/share/ovn/scripts/ovn-ctl ${OVN_CTL_OPTS:-} stop_northd'
+# Oracle's native ovn-northd unit owns its DB directory as the OVS service
+# identity. Mirror that precondition here: without it, ovsdb-server drops to
+# openvswitch and cannot lock root-created NB/SB database files on SELinux OL9.
+ExecStartPre=-/bin/sh -c 'exec /usr/bin/chown -R "$OVN_USER_ID" "$OVN_DBDIR"'
+ExecStart=/bin/sh -c 'exec /usr/share/ovn/scripts/ovn-ctl --ovn-user=${OVN_USER_ID} ${OVN_CTL_OPTS:-} start_northd'
+ExecStop=/bin/sh -c 'exec /usr/share/ovn/scripts/ovn-ctl --ovn-user=${OVN_USER_ID} ${OVN_CTL_OPTS:-} stop_northd'
 
 [Install]
 WantedBy=multi-user.target
@@ -941,9 +946,11 @@ After=openvswitch.service
 Type=oneshot
 RemainAfterExit=yes
 Environment=OVN_RUNDIR=/run/ovn OVN_DBDIR=/var/lib/ovn
+EnvironmentFile=-/etc/sysconfig/ovn
 EnvironmentFile=-/etc/default/ovn-central
-ExecStart=/bin/sh -c 'exec /usr/share/ovn/scripts/ovn-ctl ${OVN_CTL_OPTS:-} start_nb_ovsdb'
-ExecStop=/bin/sh -c 'exec /usr/share/ovn/scripts/ovn-ctl ${OVN_CTL_OPTS:-} stop_nb_ovsdb'
+ExecStartPre=-/bin/sh -c 'exec /usr/bin/chown -R "$OVN_USER_ID" "$OVN_DBDIR"'
+ExecStart=/bin/sh -c 'exec /usr/share/ovn/scripts/ovn-ctl --ovn-user=${OVN_USER_ID} ${OVN_CTL_OPTS:-} start_nb_ovsdb'
+ExecStop=/bin/sh -c 'exec /usr/share/ovn/scripts/ovn-ctl --ovn-user=${OVN_USER_ID} ${OVN_CTL_OPTS:-} stop_nb_ovsdb'
 EOF
     $SUDO tee /etc/systemd/system/ovn-ovsdb-server-sb.service >/dev/null <<'EOF'
 [Unit]
@@ -956,9 +963,11 @@ After=openvswitch.service
 Type=oneshot
 RemainAfterExit=yes
 Environment=OVN_RUNDIR=/run/ovn OVN_DBDIR=/var/lib/ovn
+EnvironmentFile=-/etc/sysconfig/ovn
 EnvironmentFile=-/etc/default/ovn-central
-ExecStart=/bin/sh -c 'exec /usr/share/ovn/scripts/ovn-ctl ${OVN_CTL_OPTS:-} start_sb_ovsdb'
-ExecStop=/bin/sh -c 'exec /usr/share/ovn/scripts/ovn-ctl ${OVN_CTL_OPTS:-} stop_sb_ovsdb'
+ExecStartPre=-/bin/sh -c 'exec /usr/bin/chown -R "$OVN_USER_ID" "$OVN_DBDIR"'
+ExecStart=/bin/sh -c 'exec /usr/share/ovn/scripts/ovn-ctl --ovn-user=${OVN_USER_ID} ${OVN_CTL_OPTS:-} start_sb_ovsdb'
+ExecStop=/bin/sh -c 'exec /usr/share/ovn/scripts/ovn-ctl --ovn-user=${OVN_USER_ID} ${OVN_CTL_OPTS:-} stop_sb_ovsdb'
 EOF
 
     $SUDO systemctl daemon-reload

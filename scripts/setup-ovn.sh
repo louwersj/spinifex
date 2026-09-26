@@ -129,8 +129,13 @@ fi
 # refuses to enable an alias. Operational calls in this script must therefore
 # use the canonical Oracle unit while Debian keeps its native name.
 OVS_SYSTEMD_UNIT="openvswitch-switch.service"
+OVN_CENTRAL_SYSTEMD_UNIT="ovn-central.service"
 if [ "$IS_ORACLE_LINUX_9" = true ]; then
     OVS_SYSTEMD_UNIT="openvswitch.service"
+    # Oracle's native unit prepares its DB directories and starts NB/SB/northd
+    # with the required SELinux transition. Use it for ordinary single-node
+    # management; the compatibility DB units remain reserved for RAFT paths.
+    OVN_CENTRAL_SYSTEMD_UNIT="ovn-northd.service"
 fi
 
 # Defaults
@@ -438,7 +443,7 @@ sudo systemctl start "$OVS_SYSTEMD_UNIT"
 echo "  ${OVS_SYSTEMD_UNIT}: started"
 
 if [ "$MANAGEMENT" = true ]; then
-    sudo systemctl enable ovn-central
+    sudo systemctl enable "$OVN_CENTRAL_SYSTEMD_UNIT"
 
     # LAN-plane NB/SB client listener, added to the loopback one set below.
     # Guard is load-bearing: --db-nb-addr defaults to 0.0.0.0, so
@@ -537,12 +542,16 @@ EOF
             sudo rm -f /etc/sysconfig/ovn-northd
             echo "  removed stale Oracle Linux 9 RAFT options"
         fi
-        sudo systemctl start ovn-central
+        sudo systemctl start "$OVN_CENTRAL_SYSTEMD_UNIT"
 
-        # ovn-central is ExecStart=/bin/true; restarting it does not restart
-        # its children, so a re-run with changed options needs the per-DB units
-        # restarted directly to pick them up.
-        sudo systemctl restart ovn-ovsdb-server-nb ovn-ovsdb-server-sb
+        # Oracle's native unit owns all three standalone daemons and prepares
+        # their SELinux-safe directories. Debian keeps its split compatibility
+        # units, whose aggregator alone does not restart children.
+        if [ "$IS_ORACLE_LINUX_9" = true ]; then
+            sudo systemctl restart "$OVN_CENTRAL_SYSTEMD_UNIT"
+        else
+            sudo systemctl restart ovn-ovsdb-server-nb ovn-ovsdb-server-sb
+        fi
         echo "  ovn-central: started (NB DB + SB DB + ovn-northd)"
         if [ -n "$LAN_ADDR" ]; then
             echo "  NB/SB client listen: 127.0.0.1, $LAN_ADDR"
@@ -660,6 +669,11 @@ echo "  br-int: created, fail-mode=secure, up"
 # probes link state misbehave. Unmanaged=yes keeps OVS in sole control.
 OVS_INTERNAL_NET=/etc/systemd/network/05-spinifex-ovs-internal.network
 if [ ! -f "$OVS_INTERNAL_NET" ]; then
+    # OL9 commonly uses NetworkManager and does not create this optional
+    # systemd-networkd configuration directory. Creating it is harmless on
+    # NetworkManager hosts and keeps the shared OVS ownership safeguard
+    # portable to both supported packaging families.
+    sudo install -d -m 0755 /etc/systemd/network
     sudo tee "$OVS_INTERNAL_NET" >/dev/null <<'NETWORK'
 [Match]
 Name=br-int br-ext
@@ -1126,7 +1140,11 @@ OVN_CTRL_OVERRIDE="/etc/systemd/system/ovn-controller.service.d/log-level.conf"
 sudo mkdir -p "$(dirname "$OVN_CTRL_OVERRIDE")"
 sudo tee "$OVN_CTRL_OVERRIDE" >/dev/null <<'OVERRIDE'
 [Service]
-ExecStartPost=/bin/sh -c 'OVS_RUNDIR=/var/run/ovn exec /usr/bin/ovs-appctl -t ovn-controller vlog/set file:warn'
+# Oracle's SELinux policy can reject this optional control-socket tuning even
+# after the controller itself starts correctly. Logging must never turn a
+# healthy datapath daemon into a failed unit, so retain the setting when
+# permitted but explicitly make its post-start action non-fatal.
+ExecStartPost=-/bin/sh -c 'OVS_RUNDIR=/var/run/ovn exec /usr/bin/ovs-appctl -t ovn-controller vlog/set file:warn'
 OVERRIDE
 sudo systemctl daemon-reload
 echo "  ovn-controller log level: file:warn (via systemd drop-in)"
