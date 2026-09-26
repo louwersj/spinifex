@@ -322,6 +322,32 @@ func TestApplyHostReserve(t *testing.T) {
 	}
 }
 
+// TestReducedHostReserve locks in the small-host fallback used by
+// NewResourceManager. These cases prove warning-only startup never creates
+// negative capacity and retains a schedulable slice where that is possible.
+func TestReducedHostReserve(t *testing.T) {
+	tests := []struct {
+		name       string
+		host       hostReserve
+		totalVCPU  int
+		totalMemGB float64
+		wantVCPU   int
+		wantMemGB  float64
+	}{
+		{name: "two vcpu low memory lab host", host: defaultHostReserve, totalVCPU: 2, totalMemGB: 1.91, wantVCPU: 1, wantMemGB: 1.41},
+		{name: "single vcpu tiny host", host: defaultHostReserve, totalVCPU: 1, totalMemGB: 0.25, wantVCPU: 0, wantMemGB: 0},
+		{name: "custom reserve is capped", host: hostReserve{vCPU: 4, memGB: 8}, totalVCPU: 3, totalMemGB: 4, wantVCPU: 2, wantMemGB: 3.5},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gotVCPU, gotMemGB := reducedHostReserve(tc.host, tc.totalVCPU, tc.totalMemGB)
+			assert.Equal(t, tc.wantVCPU, gotVCPU)
+			assert.InDelta(t, tc.wantMemGB, gotMemGB, 0.001)
+		})
+	}
+}
+
 func TestAllocateForLaunch(t *testing.T) {
 	tests := []struct {
 		name     string

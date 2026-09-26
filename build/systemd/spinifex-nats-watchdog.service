@@ -1,4 +1,4 @@
-# spinifex-unit-version: 2
+# spinifex-unit-version: 3
 [Unit]
 Description=Spinifex NATS JetStream liveness watchdog
 PartOf=spinifex.target
@@ -10,7 +10,8 @@ Type=oneshot
 # canary KV round-trip via spx, and the remedy is `systemctl try-restart
 # spinifex-nats` when JetStream stops accepting writes while the process stays
 # alive (which Restart=on-failure cannot catch).
-ExecStart=/var/lib/spinifex/nats-js-watchdog.sh
+# Run through the SELinux-labelled shell: OL9 does not execute var_lib_t directly.
+ExecStart=/usr/bin/bash /var/lib/spinifex/nats-js-watchdog.sh
 # Sized for the probe loop's own worst case (3 samples x (5s curl + 5s canary)
 # + 2 gaps x 2s = 34s): a stop mid-cycle lets the script finish rather than
 # cutting it off. Only the failing path runs that long; a healthy node exits on
@@ -21,7 +22,6 @@ TimeoutStopSec=45
 # activating(start) forever and could not be retriggered by its timer.
 TimeoutStartSec=120
 
-# Hardening (kept compatible with talking to PID1 over /run/systemd).
 NoNewPrivileges=yes
 ProtectHome=yes
 PrivateTmp=yes

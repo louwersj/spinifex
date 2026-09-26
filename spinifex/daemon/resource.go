@@ -82,6 +82,18 @@ func applyHostReserve(host hostReserve, totalVCPU int, totalMemGB float64) (vcpu
 	return host.vCPU, host.memGB, nil
 }
 
+// reducedHostReserve derives a safe, non-negative reserve for a host which is
+// smaller than the recommended infrastructure footprint. It leaves one vCPU
+// and minHostMemHeadroomGB schedulable whenever the physical host has them, so
+// the allocator cannot advertise negative capacity after a warning-only start.
+// The caller must record the accompanying warning: this is a compatibility
+// fallback for lab and edge nodes, not a production sizing recommendation.
+func reducedHostReserve(host hostReserve, totalVCPU int, totalMemGB float64) (vcpu int, mem float64) {
+	vcpu = min(host.vCPU, max(totalVCPU-1, 0))
+	mem = min(host.memGB, max(totalMemGB-minHostMemHeadroomGB, 0))
+	return vcpu, mem
+}
+
 // canAllocateCount returns how many instances of the given type fit in remaining
 // capacity, capped at maxCount. Logs an error if capacity is negative.
 func canAllocateCount(availVCPU, allocVCPU int, availMem, allocMem float64,

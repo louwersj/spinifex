@@ -478,8 +478,9 @@ func parsePhysicalCores(data []byte) (int, bool) {
 	return len(cores), true
 }
 
-// NewResourceManager creates a new ResourceManager. Errors if memory detection
-// fails or if the host is too small to satisfy the daemon's reserve.
+// NewResourceManager creates a new ResourceManager. Memory detection remains
+// mandatory; an undersized host starts with a reduced reserve and a prominent
+// warning, which keeps small lab and edge installations operable.
 func NewResourceManager(gpuModels []instancetypes.GPUModel, migProfiles []instancetypes.MIGProfileSpec, gpuMgr *gpu.Manager) (*ResourceManager, error) {
 	// Use physical cores (not SMT threads); SPINIFEX_HOST_VCPU overrides.
 	hostVCPU := resolveHostVCPU(os.Getenv, physicalCoreCount())
@@ -492,10 +493,15 @@ func NewResourceManager(gpuModels []instancetypes.GPUModel, migProfiles []instan
 	reserve := resolveHostReserve(os.Getenv)
 	reservedVCPU, reservedMem, err := applyHostReserve(reserve, hostVCPU, totalMemGB)
 	if err != nil {
-		slog.Error("host below minimum reserve — daemon refuses to start",
+		// Clamp only the reservation (never detected capacity), retaining an
+		// accurate admission boundary on a small host while allowing the control
+		// plane to start. Operators can eliminate this warning by resizing.
+		reservedVCPU, reservedMem = reducedHostReserve(reserve, hostVCPU, totalMemGB)
+		slog.Warn("host below recommended reserve — starting with reduced reservation",
 			"err", err, "hostVCPU", hostVCPU, "hostMemGB", totalMemGB,
-			"reserveVCPU", reserve.vCPU, "reserveMemGB", reserve.memGB)
-		return nil, fmt.Errorf("validate host reserve: %w", err)
+			"configuredReserveVCPU", reserve.vCPU, "configuredReserveMemGB", reserve.memGB,
+			"effectiveReservedVCPU", reservedVCPU, "effectiveReservedMemGB", reservedMem,
+			"recommendedAction", "increase host capacity for production workloads")
 	}
 
 	arch := "x86_64"
