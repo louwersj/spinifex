@@ -4,5 +4,5 @@ package preflight
 
 var canonicalHashes = map[string]string{
 	"/usr/local/lib/spinifex/spinifex-set-endpoint-sysctl": "8f9bf3205d02b35e147924e3f6fa119ed3d5414375d325d905b80cbba349b613",
-	"/usr/local/lib/spinifex/ovs-socket-perms.sh":          "11ad8fa79ca1544044afbf1bba944a8248ff0e0278ce6c4af7e19de5c61b9b9a",
+	"/usr/local/lib/spinifex/ovs-socket-perms.sh":          "b5300f23b000e1968a6b125136beb56c061f4af4aca4c5e7f6429917c3e686dc",
 }
