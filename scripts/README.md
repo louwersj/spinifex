@@ -1,5 +1,9 @@
 # Spinifex Scripts
 
+Oracle Linux 9 and local Proxmox test support in this directory was contributed
+by Johan Louwers. The entries below state the safety boundaries and purpose of
+each added utility so it can be operated and reviewed independently.
+
 Node installation, dev-environment lifecycle, guest image builds, and verification tooling for Spinifex.
 
 ## Install and node setup

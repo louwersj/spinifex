@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Create or destroy a disposable Oracle Linux 9 VM for local Spinifex testing.
+# Contributed by Johan Louwers: documents and reproduces the tested Proxmox
+# hardware contract (host CPU, VirtIO root disk, standard VGA) explicitly.
 #
 # This intentionally targets a single-node Proxmox test environment.  It uses
 # the host CPU model and a VirtIO root disk: the Oracle OL9 KVM image did not

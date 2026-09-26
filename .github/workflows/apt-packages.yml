@@ -1,3 +1,5 @@
+# Oracle Linux 9 package-validation extension contributed by Johan Louwers.
+# It checks stock DNF dependencies independently from the signed network RPMs.
 name: Apt Packages
 
 # Path-filtered like image-scripts.yml: this resolves setup.sh's runtime package

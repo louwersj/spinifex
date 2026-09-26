@@ -39,7 +39,7 @@ This guide installs Spinifex on a single server using the binary installer. For 
 
 - Ubuntu 26.04
 - Debian 13
-- Oracle Linux 9, with the required [signed network-runtime repository](/docs/oracle-linux-9)
+- Oracle Linux 9, contributed by Johan Louwers, with the required [signed network-runtime repository](/docs/oracle-linux-9)
 
 **What Gets Installed:**
 

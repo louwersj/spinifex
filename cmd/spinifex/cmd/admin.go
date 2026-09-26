@@ -3440,6 +3440,8 @@ type caTrustStore struct {
 }
 
 // caTrustStoreForOSRelease returns the host trust-store convention supported
+// by Spinifex. Oracle Linux 9 handling was contributed by Johan Louwers so
+// admin CA installation uses the RHEL-family trust location and update command.
 // by the installer. Keep it pure so release packaging can test every platform
 // without needing to mutate a container's real trust database.
 func caTrustStoreForOSRelease(osRelease []byte) (caTrustStore, error) {

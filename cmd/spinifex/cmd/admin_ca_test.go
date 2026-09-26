@@ -2,6 +2,8 @@ package cmd
 
 import "testing"
 
+// Oracle Linux 9 regression case contributed by Johan Louwers. Keep this table
+// test adjacent to the installer support so an OS trust-store change is explicit.
 func TestCATrustStoreForOSRelease(t *testing.T) {
 	tests := []struct {
 		name      string

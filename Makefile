@@ -1,3 +1,5 @@
+# Oracle Linux 9 native-distribution target contributed by Johan Louwers.
+# The target below builds its C plugin in OL9 rather than cross-reusing Debian output.
 GO_PROJECT_NAME := spx
 SHELL := /bin/bash
 

@@ -1,3 +1,5 @@
+# Oracle Linux 9 native build image contributed by Johan Louwers.
+# It produces the platform-specific nbdkit plugin shipped in the OL9 release tarball.
 ARG GO_VERSION=1.27.0
 
 FROM oraclelinux:9 AS builder

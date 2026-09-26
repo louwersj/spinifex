@@ -1,3 +1,5 @@
+# Oracle Linux 9 release-artifact job contributed by Johan Louwers.
+# It publishes an OL9-native tarball because its nbdkit plugin is ABI-specific.
 name: Release
 
 on:

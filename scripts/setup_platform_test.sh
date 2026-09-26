@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Oracle Linux 9 platform-selection coverage contributed by Johan Louwers.
 # Fast host-platform regression checks. Package availability is checked in
 # containers by lint-apt-packages.sh and lint-dnf-packages.sh.
 set -euo pipefail

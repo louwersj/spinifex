@@ -1,4 +1,5 @@
 #!/bin/bash
+# Oracle Linux 9 installer and fork-aware release-source support contributed by Johan Louwers.
 # Spinifex binary installer
 # Usage: curl -sfL https://install.mulgadc.com | bash
 #

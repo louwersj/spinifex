@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Oracle Linux 9 DNF validation contributed by Johan Louwers.
 # Resolve the Oracle Linux 9 *base* dependency list against the supported DNF
 # repositories. The OVS/OVN runtime comes from an explicitly configured,
 # signed Spinifex repository and is verified by the VM release test; Oracle

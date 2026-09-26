@@ -12,6 +12,9 @@ tags:
 
 # Oracle Linux 9 deployment
 
+> Contribution note — Johan Louwers added this deployment path, its fork-aware
+> release guidance, and its explicit signed network-runtime safety boundary.
+
 Spinifex supports Oracle Linux 9 hosts only when they are supplied with the
 Spinifex OL9 network-runtime repository. This is deliberate: stock Oracle
 Linux 9 does not publish a production-supported Open vSwitch/OVN package set
