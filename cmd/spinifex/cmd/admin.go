@@ -612,7 +612,7 @@ func runimagesImportCmd(cmd *cobra.Command, args []string) {
 		// cache on the re-run path — failure leaves the file on disk so the
 		// operator can inspect; recover with --force.
 		if skipVerify {
-			fmt.Fprintf(os.Stderr, "⚠️  --skip-verify set: checksum verification skipped for %s\n", imageName)
+			fmt.Fprintf(os.Stderr, "[WARNING]  --skip-verify set: checksum verification skipped for %s\n", imageName)
 		} else {
 			if image.Checksum == "" || image.ChecksumType == "" {
 				fmt.Fprintf(os.Stderr, "Catalog entry %q is missing Checksum/ChecksumType; refusing import.\n", imageName)
@@ -622,7 +622,7 @@ func runimagesImportCmd(cmd *cobra.Command, args []string) {
 				printChecksumError(os.Stderr, imageFile, imageName, image, err)
 				os.Exit(1)
 			}
-			fmt.Printf("✅ Verified image checksum (%s)\n", image.ChecksumType)
+			fmt.Printf("[OK] Verified image checksum (%s)\n", image.ChecksumType)
 		}
 	}
 
@@ -738,7 +738,7 @@ func runimagesImportCmd(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	fmt.Printf("✅ Image import complete. Image-ID (AMI): %s\n", volumeId)
+	fmt.Printf("[OK] Image import complete. Image-ID (AMI): %s\n", volumeId)
 }
 
 // registerImportedAMISnapshot writes the EC2 control plane's snapshot document
@@ -886,7 +886,7 @@ func runimagesRemoveCmd(cmd *cobra.Command, args []string) {
 	}
 
 	if force && (!preview.ConfigPresent || !preview.Dependents.Empty()) {
-		fmt.Println("⚠️  --force: skipping dependency check and ownership check.")
+		fmt.Println("[WARNING]  --force: skipping dependency check and ownership check.")
 		if !preview.Dependents.Empty() {
 			printDependents(os.Stdout, preview.Dependents)
 		}
@@ -915,7 +915,7 @@ func runimagesRemoveCmd(cmd *cobra.Command, args []string) {
 
 	// BytesDeleted is logical: predastore reclaims the underlying disk space
 	// asynchronously via background compaction, not at delete time.
-	fmt.Printf("✅ Removed AMI %s (%d objects, %s marked for deletion; disk space is reclaimed by background compaction).\n",
+	fmt.Printf("[OK] Removed AMI %s (%d objects, %s marked for deletion; disk space is reclaimed by background compaction).\n",
 		imageID, res.ObjectsDeleted, utils.HumanBytes(safecast.Int64ToUint64(res.BytesDeleted)))
 }
 
@@ -998,7 +998,7 @@ func runimagesPromoteCmd(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	fmt.Printf("✅ Promoted %s to system image (owner: %s).\n", imageID, admin.SystemOwnerAlias)
+	fmt.Printf("[OK] Promoted %s to system image (owner: %s).\n", imageID, admin.SystemOwnerAlias)
 }
 
 // List remote images available.
@@ -1031,7 +1031,7 @@ func runimagesListCmd(cmd *cobra.Command, args []string) {
 // TODO: Move all logic to a module, use minimal application logic in viper commands.
 func runAdminInit(cmd *cobra.Command, args []string) {
 	if os.Getuid() != 0 {
-		fmt.Fprintln(os.Stderr, "⚠️  Warning: 'spx admin init' is not running as root.")
+		fmt.Fprintln(os.Stderr, "[WARNING]  Warning: 'spx admin init' is not running as root.")
 		fmt.Fprintln(os.Stderr, "   Service user setup and CA certificate installation will be skipped.")
 		fmt.Fprintln(os.Stderr, "   For production deployments, run with sudo.")
 	}
@@ -1115,13 +1115,13 @@ func runAdminInit(cmd *cobra.Command, args []string) {
 	var detectedNet *admin.DetectedNetwork
 	detected, err := admin.DetectNetwork()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "⚠️  Network auto-detection failed: %v\n", err)
+		fmt.Fprintf(os.Stderr, "[WARNING]  Network auto-detection failed: %v\n", err)
 		fmt.Fprintf(os.Stderr, "   Use --external-mode=nat for outbound-only VMs on a non-bridgeable uplink, or specify --external-* flags manually.\n")
 	} else {
 		detectedNet = detected
 
 		// Print detected topology
-		fmt.Println("\n🔍 Detected network topology:")
+		fmt.Println("\n[INFO] Detected network topology:")
 		fmt.Printf("  %-14s %-18s %-20s %-16s %s\n", "Interface", "IP", "Subnet", "Gateway", "Role")
 		for _, iface := range detected.Interfaces {
 			gw := "—"
@@ -1153,7 +1153,7 @@ func runAdminInit(cmd *cobra.Command, args []string) {
 			// a SuggestPoolRange hint.
 			if externalMode == "" && !cmd.Flags().Changed("external-mode") {
 				if isNonBridgeableUplink(detected.WAN.Name) {
-					fmt.Fprintf(os.Stderr, "\n❌ Detected WAN interface %s cannot be bridged (WiFi/cellular/PPP).\n", detected.WAN.Name)
+					fmt.Fprintf(os.Stderr, "\n[ERROR] Detected WAN interface %s cannot be bridged (WiFi/cellular/PPP).\n", detected.WAN.Name)
 					fmt.Fprintf(os.Stderr, "   Use routed NAT mode instead (outbound-only VM networking):\n")
 					fmt.Fprintf(os.Stderr, "     ./scripts/setup-ovn.sh --management --nat-uplink\n")
 					fmt.Fprintf(os.Stderr, "     spx admin init --external-mode=nat\n")
@@ -1165,7 +1165,7 @@ func runAdminInit(cmd *cobra.Command, args []string) {
 	}
 	// Validate external networking flags
 	if externalMode != "" && externalMode != "pool" && externalMode != "nat" {
-		fmt.Fprintf(os.Stderr, "❌ Error: --external-mode must be 'pool', 'nat', or empty, got: %s\n", externalMode)
+		fmt.Fprintf(os.Stderr, "[ERROR] Error: --external-mode must be 'pool', 'nat', or empty, got: %s\n", externalMode)
 		os.Exit(1)
 	}
 	// A public pool alongside nat's transit pool restores EIP / public-subnet
@@ -1177,11 +1177,11 @@ func runAdminInit(cmd *cobra.Command, args []string) {
 	natPublicGateway := externalGateway
 	if externalMode == "nat" {
 		if nodes >= 2 {
-			fmt.Fprintf(os.Stderr, "❌ Error: --external-mode=nat is single-node only (v1); use --nodes=1\n")
+			fmt.Fprintf(os.Stderr, "[ERROR] Error: --external-mode=nat is single-node only (v1); use --nodes=1\n")
 			os.Exit(1)
 		}
 		if !natPublicPool && (externalBindBridge != "" || gatewayIP != "") {
-			fmt.Fprintf(os.Stderr, "❌ Error: --external-bind-bridge/--gateway-ip require --external-pool or --external-source in --external-mode=nat\n")
+			fmt.Fprintf(os.Stderr, "[ERROR] Error: --external-bind-bridge/--gateway-ip require --external-pool or --external-source in --external-mode=nat\n")
 			os.Exit(1)
 		}
 		if natPublicPool {
@@ -1189,7 +1189,7 @@ func runAdminInit(cmd *cobra.Command, args []string) {
 			// is no br-wan (nothing is bridged in routed mode).
 			src, start, end, bb, err := resolvePublicPoolFlags(externalSource, externalPool, externalBindBridge, natPublicGateway, externalIface)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "❌ Error: %v\n", err)
+				fmt.Fprintf(os.Stderr, "[ERROR] Error: %v\n", err)
 				os.Exit(1)
 			}
 			externalSource, poolStart, poolEnd, externalBindBridge = src, start, end, bb
@@ -1201,7 +1201,7 @@ func runAdminInit(cmd *cobra.Command, args []string) {
 	if externalMode == "pool" {
 		src, start, end, bb, err := resolvePublicPoolFlags(externalSource, externalPool, externalBindBridge, externalGateway, "br-wan")
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "❌ Error: %v\n", err)
+			fmt.Fprintf(os.Stderr, "[ERROR] Error: %v\n", err)
 			if strings.Contains(err.Error(), "--external-pool is required") && detectedNet != nil && detectedNet.WAN != nil {
 				sugStart, sugEnd := admin.SuggestPoolRange(detectedNet.WAN)
 				fmt.Fprintf(os.Stderr, "   Suggested: --external-pool=%s-%s\n", sugStart, sugEnd)
@@ -1211,21 +1211,21 @@ func runAdminInit(cmd *cobra.Command, args []string) {
 		externalSource, poolStart, poolEnd, externalBindBridge = src, start, end, bb
 	}
 	if externalGateway != "" && net.ParseIP(externalGateway) == nil {
-		fmt.Fprintf(os.Stderr, "❌ Error: --external-gateway is not a valid IP: %s\n", externalGateway)
+		fmt.Fprintf(os.Stderr, "[ERROR] Error: --external-gateway is not a valid IP: %s\n", externalGateway)
 		os.Exit(1)
 	}
 	if natPublicGateway != "" && net.ParseIP(natPublicGateway) == nil {
-		fmt.Fprintf(os.Stderr, "❌ Error: --external-gateway is not a valid IP: %s\n", natPublicGateway)
+		fmt.Fprintf(os.Stderr, "[ERROR] Error: --external-gateway is not a valid IP: %s\n", natPublicGateway)
 		os.Exit(1)
 	}
 	if gatewayIP != "" && net.ParseIP(gatewayIP) == nil {
-		fmt.Fprintf(os.Stderr, "❌ Error: --gateway-ip is not a valid IP: %s\n", gatewayIP)
+		fmt.Fprintf(os.Stderr, "[ERROR] Error: --gateway-ip is not a valid IP: %s\n", gatewayIP)
 		os.Exit(1)
 	}
 
 	// Validate IP address format
 	if net.ParseIP(bindIP) == nil {
-		fmt.Fprintf(os.Stderr, "❌ Error: Invalid IP address for --bind: %s\n", bindIP)
+		fmt.Fprintf(os.Stderr, "[ERROR] Error: Invalid IP address for --bind: %s\n", bindIP)
 		os.Exit(1)
 	}
 
@@ -1238,7 +1238,7 @@ func runAdminInit(cmd *cobra.Command, args []string) {
 	}
 	advertiseIP, err := resolveAdvertiseIP(bindIP, advertiseFlag, detectedNet)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "❌ Error: %v\n", err)
+		fmt.Fprintf(os.Stderr, "[ERROR] Error: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -1285,7 +1285,7 @@ func runAdminInit(cmd *cobra.Command, args []string) {
 
 	// Validate port range
 	if port < 1 || port > 65535 {
-		fmt.Fprintf(os.Stderr, "❌ Error: Port must be between 1 and 65535, got: %d\n", port)
+		fmt.Fprintf(os.Stderr, "[ERROR] Error: Port must be between 1 and 65535, got: %d\n", port)
 		os.Exit(1)
 	}
 
@@ -1301,13 +1301,13 @@ func runAdminInit(cmd *cobra.Command, args []string) {
 		configDir = DefaultConfigDir()
 	}
 
-	fmt.Println("🚀 Initializing Spinifex platform...")
+	fmt.Println("[INFO] Initializing Spinifex platform...")
 	fmt.Printf("Configuration directory: %s\n\n", configDir)
 
 	// Check if already initialized
 	spinifexTomlPath := filepath.Join(configDir, "spinifex.toml")
 	if !force && admin.FileExists(spinifexTomlPath) {
-		fmt.Println("⚠️  Spinifex already initialized!")
+		fmt.Println("[WARNING]  Spinifex already initialized!")
 		fmt.Printf("Config file exists: %s\n", spinifexTomlPath)
 		fmt.Println("\nTo re-initialize, run with --force flag:")
 		fmt.Println("  spx admin init --force")
@@ -1319,7 +1319,7 @@ func runAdminInit(cmd *cobra.Command, args []string) {
 	}
 	discardJetStream, _ := cmd.Flags().GetBool("discard-jetstream")
 	if err := checkInitJetStreamStore(jetStreamStoreDir(spxRoot), nodes, discardJetStream); err != nil {
-		fmt.Fprintf(os.Stderr, "❌ Error: %v\n", err)
+		fmt.Fprintf(os.Stderr, "[ERROR] Error: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -1556,7 +1556,7 @@ func runAdminInit(cmd *cobra.Command, args []string) {
 	if predastoreNodesStr != "" {
 		ips := strings.Split(predastoreNodesStr, ",")
 		if len(ips) < 2 {
-			fmt.Fprintf(os.Stderr, "❌ Error: --predastore-nodes requires at least 2 IPs, got %d\n", len(ips))
+			fmt.Fprintf(os.Stderr, "[ERROR] Error: --predastore-nodes requires at least 2 IPs, got %d\n", len(ips))
 			os.Exit(1)
 		}
 
@@ -1564,7 +1564,7 @@ func runAdminInit(cmd *cobra.Command, args []string) {
 		for i, ip := range ips {
 			ip = strings.TrimSpace(ip)
 			if net.ParseIP(ip) == nil {
-				fmt.Fprintf(os.Stderr, "❌ Error: Invalid IP in --predastore-nodes: %s\n", ip)
+				fmt.Fprintf(os.Stderr, "[ERROR] Error: Invalid IP in --predastore-nodes: %s\n", ip)
 				os.Exit(1)
 			}
 			predastoreNodes = append(predastoreNodes, admin.PredastoreNodeConfig{
@@ -1577,7 +1577,7 @@ func runAdminInit(cmd *cobra.Command, args []string) {
 		// matches this bind IP is this node's host ID.
 		predastoreHostID = admin.FindNodeIDByIP(predastoreNodes, bindIP)
 		if predastoreHostID == 0 {
-			fmt.Fprintf(os.Stderr, "❌ Error: --bind IP %s not found in --predastore-nodes list\n", bindIP)
+			fmt.Fprintf(os.Stderr, "[ERROR] Error: --bind IP %s not found in --predastore-nodes list\n", bindIP)
 			os.Exit(1)
 		}
 
@@ -1593,7 +1593,7 @@ func runAdminInit(cmd *cobra.Command, args []string) {
 			fmt.Fprintf(os.Stderr, "Error writing predastore config: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Printf("✅ Created: multi-node predastore.toml (host ID: %d)\n", predastoreHostID)
+		fmt.Printf("[OK] Created: multi-node predastore.toml (host ID: %d)\n", predastoreHostID)
 	}
 
 	// Pre-generate default VPC/subnet/IGW IDs for bootstrap config.
@@ -1711,13 +1711,13 @@ func runAdminInit(cmd *cobra.Command, args []string) {
 		"MANAGEMENT_IFACE": "br-wan",
 		"NODE_HOSTNAME":    nodeHostname,
 	}); err != nil {
-		fmt.Fprintf(os.Stderr, "⚠️  Warning: could not write %s: %v\n", nodeConfPath, err)
+		fmt.Fprintf(os.Stderr, "[WARNING]  Warning: could not write %s: %v\n", nodeConfPath, err)
 	}
 
 	// Print success message
-	fmt.Println("\n🎉 Spinifex initialization complete!")
+	fmt.Println("\n[INFO] Spinifex initialization complete!")
 	fmt.Println()
-	fmt.Println("🔗 Configuration:")
+	fmt.Println("[INFO] Configuration:")
 	fmt.Printf("   Config file: %s\n", spinifexTomlPath)
 	fmt.Printf("   Data directory: %s\n", spxRoot)
 	fmt.Printf("   Bind IP: %s (listen)\n", bindIP)
@@ -1740,17 +1740,17 @@ func runAdminInitMultiNode(cmd *cobra.Command, accessKey, secretKey, accountID, 
 	northstarCreds admin.NorthstarCredentials) {
 	formationTimeout, err := time.ParseDuration(formationTimeoutStr)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "❌ Error: Invalid --formation-timeout: %v\n", err)
+		fmt.Fprintf(os.Stderr, "[ERROR] Error: Invalid --formation-timeout: %v\n", err)
 		os.Exit(1)
 	}
 
 	tokenTTL, err := time.ParseDuration(tokenTTLStr)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "❌ Error: Invalid --token-ttl: %v\n", err)
+		fmt.Fprintf(os.Stderr, "[ERROR] Error: Invalid --token-ttl: %v\n", err)
 		os.Exit(1)
 	}
 	if tokenTTL < formationTimeout+1*time.Minute {
-		fmt.Fprintf(os.Stderr, "❌ Error: --token-ttl (%s) must be >= --formation-timeout + 1m (%s)\n", tokenTTL, formationTimeout+1*time.Minute)
+		fmt.Fprintf(os.Stderr, "[ERROR] Error: --token-ttl (%s) must be >= --formation-timeout + 1m (%s)\n", tokenTTL, formationTimeout+1*time.Minute)
 		os.Exit(1)
 	}
 
@@ -1758,7 +1758,7 @@ func runAdminInitMultiNode(cmd *cobra.Command, accessKey, secretKey, accountID, 
 
 	joinToken, err := formation.GenerateJoinToken()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "❌ Error generating join token: %v\n", err)
+		fmt.Fprintf(os.Stderr, "[ERROR] Error generating join token: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -1771,12 +1771,12 @@ func runAdminInitMultiNode(cmd *cobra.Command, accessKey, secretKey, accountID, 
 	// Read CA cert/key for distribution to joining nodes
 	caCertData, err := os.ReadFile(filepath.Join(configDir, "ca.pem"))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "❌ Error reading CA cert: %v\n", err)
+		fmt.Fprintf(os.Stderr, "[ERROR] Error reading CA cert: %v\n", err)
 		os.Exit(1)
 	}
 	caKeyData, err := os.ReadFile(filepath.Join(configDir, "ca.key"))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "❌ Error reading CA key: %v\n", err)
+		fmt.Fprintf(os.Stderr, "[ERROR] Error reading CA key: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -1816,21 +1816,21 @@ func runAdminInitMultiNode(cmd *cobra.Command, accessKey, secretKey, accountID, 
 		Port:        port,
 	}
 	if err := fs.RegisterNode(selfNode); err != nil {
-		fmt.Fprintf(os.Stderr, "❌ Error registering self: %v\n", err)
+		fmt.Fprintf(os.Stderr, "[ERROR] Error registering self: %v\n", err)
 		os.Exit(1)
 	}
 
 	// Write join token to file for automated workflows
 	tokenPath := filepath.Join(configDir, "join-token")
 	if err := os.WriteFile(tokenPath, []byte(joinToken), 0600); err != nil {
-		fmt.Fprintf(os.Stderr, "❌ Error writing join token: %v\n", err)
+		fmt.Fprintf(os.Stderr, "[ERROR] Error writing join token: %v\n", err)
 		os.Exit(1)
 	}
 
 	// Start formation server
 	formationAddr := fmt.Sprintf("%s:%d", bindIP, port)
 	if err := fs.Start(formationAddr); err != nil {
-		fmt.Fprintf(os.Stderr, "❌ Error starting formation server: %v\n", err)
+		fmt.Fprintf(os.Stderr, "[ERROR] Error starting formation server: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -1838,7 +1838,7 @@ func runAdminInitMultiNode(cmd *cobra.Command, accessKey, secretKey, accountID, 
 	// not one yet. Closed again on every exit below.
 	closeFormationPort := openFormationPort(port)
 
-	fmt.Printf("\n📡 Formation server started on %s\n", formationAddr)
+	fmt.Printf("\n[INFO] Formation server started on %s\n", formationAddr)
 	fmt.Printf("   Waiting for %d more node(s) to join...\n", expectedNodes-1)
 	fmt.Printf("   Token expires in %s\n\n", tokenTTL)
 	fmt.Printf("   Other nodes should run:\n")
@@ -1846,24 +1846,24 @@ func runAdminInitMultiNode(cmd *cobra.Command, accessKey, secretKey, accountID, 
 
 	// Wait for all nodes to register
 	if err := fs.WaitForCompletion(formationTimeout); err != nil {
-		fmt.Fprintf(os.Stderr, "❌ %v\n", err)
+		fmt.Fprintf(os.Stderr, "[ERROR] %v\n", err)
 		fs.Shutdown(context.Background())
 		closeFormationPort()
 		os.Remove(tokenPath)
 		os.Exit(1)
 	}
 
-	fmt.Printf("✅ All %d nodes joined!\n", expectedNodes)
+	fmt.Printf("[OK] All %d nodes joined!\n", expectedNodes)
 
 	// The pre-start check refused a store with streams unless discard was asked
 	// for, so anything left here is removed now that the cluster is committed.
 	if discard, _ := cmd.Flags().GetBool("discard-jetstream"); discard {
 		storeDir := jetStreamStoreDir(spxRoot)
 		if err := discardJetStreamStore(storeDir); err != nil {
-			fmt.Fprintf(os.Stderr, "❌ Error: %v\n", err)
+			fmt.Fprintf(os.Stderr, "[ERROR] Error: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Printf("✅ Discarded this node's pre-formation JetStream store: %s\n", storeDir)
+		fmt.Printf("[OK] Discarded this node's pre-formation JetStream store: %s\n", storeDir)
 	}
 
 	// Build cluster topology from formation data
@@ -1872,7 +1872,7 @@ func runAdminInitMultiNode(cmd *cobra.Command, accessKey, secretKey, accountID, 
 	predastoreNodes := formation.BuildPredastoreNodes(allNodes)
 	ovnNBAddr, ovnSBAddr := formation.BuildOVNDBAddrs(allNodes)
 
-	fmt.Println("\n📝 Creating configuration files...")
+	fmt.Println("\n[INFO] Creating configuration files...")
 
 	dirs, err := createConfigSubdirs(configDir)
 	if err != nil {
@@ -1909,10 +1909,10 @@ func runAdminInitMultiNode(cmd *cobra.Command, accessKey, secretKey, accountID, 
 		// [[host]] to run and refuses to start.
 		predastoreHostID = admin.FindNodeIDByIP(predastoreNodes, bindIP)
 		if predastoreHostID == 0 {
-			fmt.Fprintf(os.Stderr, "❌ Error: bind IP %s not found in the predastore node list\n", bindIP)
+			fmt.Fprintf(os.Stderr, "[ERROR] Error: bind IP %s not found in the predastore node list\n", bindIP)
 			os.Exit(1)
 		}
-		fmt.Printf("✅ Created: multi-node predastore.toml (host ID: %d)\n", predastoreHostID)
+		fmt.Printf("[OK] Created: multi-node predastore.toml (host ID: %d)\n", predastoreHostID)
 	}
 
 	spinifexTomlPath := filepath.Join(configDir, "spinifex.toml")
@@ -1974,7 +1974,7 @@ func runAdminInitMultiNode(cmd *cobra.Command, accessKey, secretKey, accountID, 
 	configureHostDNS(configSettings, skipHostDNS)
 
 	// Keep formation server running briefly so joining nodes can fetch complete status
-	fmt.Println("\n⏳ Waiting for joining nodes to fetch cluster data...")
+	fmt.Println("\n[INFO] Waiting for joining nodes to fetch cluster data...")
 	time.Sleep(15 * time.Second)
 
 	// Shutdown formation server
@@ -1985,7 +1985,7 @@ func runAdminInitMultiNode(cmd *cobra.Command, accessKey, secretKey, accountID, 
 	}
 
 	// Print cluster summary
-	fmt.Println("\n🎉 Cluster formation complete!")
+	fmt.Println("\n[INFO] Cluster formation complete!")
 	fmt.Printf("   Cluster: %s (%d nodes)\n", clusterName, expectedNodes)
 	fmt.Printf("   Region: %s\n", region)
 	fmt.Printf("   Bind: %s  Advertise: %s  Loopback: 127.0.0.1\n", bindIP, advertiseIP)
@@ -1997,7 +1997,7 @@ func runAdminInitMultiNode(cmd *cobra.Command, accessKey, secretKey, accountID, 
 		}
 		fmt.Printf("     - %s (bind=%s advertise=%s)\n", name, n.BindIP, adv)
 	}
-	fmt.Println("\n📋 Next steps:")
+	fmt.Println("\n[INFO] Next steps:")
 	fmt.Println("   1. Start services on ALL nodes:")
 	fmt.Println("      sudo systemctl start spinifex.target")
 	fmt.Println()
@@ -2063,7 +2063,7 @@ To proceed: spx admin join --force ...`
 
 func runAdminJoin(cmd *cobra.Command, args []string) {
 	if os.Getuid() != 0 {
-		fmt.Fprintln(os.Stderr, "⚠️  Warning: 'spx admin join' is not running as root.")
+		fmt.Fprintln(os.Stderr, "[WARNING]  Warning: 'spx admin join' is not running as root.")
 		fmt.Fprintln(os.Stderr, "   Service user setup and CA certificate installation will be skipped.")
 		fmt.Fprintln(os.Stderr, "   For production deployments, run with sudo.")
 	}
@@ -2097,17 +2097,17 @@ func runAdminJoin(cmd *cobra.Command, args []string) {
 
 	// Validate required parameters
 	if node == "" {
-		fmt.Fprintf(os.Stderr, "❌ Error: --node is required\n")
+		fmt.Fprintf(os.Stderr, "[ERROR] Error: --node is required\n")
 		os.Exit(1)
 	}
 	if leaderHost == "" {
-		fmt.Fprintf(os.Stderr, "❌ Error: --host is required\n")
+		fmt.Fprintf(os.Stderr, "[ERROR] Error: --host is required\n")
 		os.Exit(1)
 	}
 
 	// Validate IP address format
 	if net.ParseIP(bindIP) == nil {
-		fmt.Fprintf(os.Stderr, "❌ Error: Invalid IP address for --bind: %s\n", bindIP)
+		fmt.Fprintf(os.Stderr, "[ERROR] Error: Invalid IP address for --bind: %s\n", bindIP)
 		os.Exit(1)
 	}
 
@@ -2121,13 +2121,13 @@ func runAdminJoin(cmd *cobra.Command, args []string) {
 	}
 	advertiseIP, err := resolveAdvertiseIP(bindIP, advertiseFlag, detectedNet)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "❌ Error: %v\n", err)
+		fmt.Fprintf(os.Stderr, "[ERROR] Error: %v\n", err)
 		os.Exit(1)
 	}
 
 	// Validate port range
 	if port < 1 || port > 65535 {
-		fmt.Fprintf(os.Stderr, "❌ Error: Port must be between 1 and 65535, got: %d\n", port)
+		fmt.Fprintf(os.Stderr, "[ERROR] Error: Port must be between 1 and 65535, got: %d\n", port)
 		os.Exit(1)
 	}
 
@@ -2139,7 +2139,7 @@ func runAdminJoin(cmd *cobra.Command, args []string) {
 	}
 	storeDir := jetStreamStoreDir(dataDir)
 	if err := checkJoinPreconditions(configDir, storeDir, force); err != nil {
-		fmt.Fprintf(os.Stderr, "⚠️  %v\n\n%s\n", err, joinDiscardsIdentityMsg)
+		fmt.Fprintf(os.Stderr, "[WARNING]  %v\n\n%s\n", err, joinDiscardsIdentityMsg)
 		os.Exit(1)
 	}
 
@@ -2148,7 +2148,7 @@ func runAdminJoin(cmd *cobra.Command, args []string) {
 		clusterBind = bindIP
 	}
 
-	fmt.Println("🚀 Joining Spinifex cluster...")
+	fmt.Println("[INFO] Joining Spinifex cluster...")
 	fmt.Printf("Node: %s\n", node)
 	fmt.Printf("Leader: %s\n", leaderHost)
 	fmt.Printf("Region: %s\n", region)
@@ -2191,7 +2191,7 @@ func runAdminJoin(cmd *cobra.Command, args []string) {
 	for attempt := 1; ; attempt++ {
 		req, reqErr := http.NewRequest(http.MethodPost, joinURL, bytes.NewBuffer(reqBody))
 		if reqErr != nil {
-			fmt.Fprintf(os.Stderr, "❌ Error creating join request: %v\n", reqErr)
+			fmt.Fprintf(os.Stderr, "[ERROR] Error creating join request: %v\n", reqErr)
 			os.Exit(1)
 		}
 		req.Header.Set("Content-Type", "application/json")
@@ -2212,16 +2212,16 @@ func runAdminJoin(cmd *cobra.Command, args []string) {
 
 		if time.Now().After(deadline) {
 			if doErr != nil {
-				fmt.Fprintf(os.Stderr, "❌ Error connecting to formation server: %v\n", doErr)
+				fmt.Fprintf(os.Stderr, "[ERROR] Error connecting to formation server: %v\n", doErr)
 			} else {
-				fmt.Fprintf(os.Stderr, "❌ Formation server returned status %d\n", statusCode)
+				fmt.Fprintf(os.Stderr, "[ERROR] Formation server returned status %d\n", statusCode)
 			}
 			fmt.Fprintf(os.Stderr, "Gave up after %s (%d attempts).\n", joinTimeout, attempt)
 			fmt.Fprintf(os.Stderr, "Make sure the leader node has run 'spx admin init' and is accessible at %s\n", leaderHost)
 			os.Exit(1)
 		}
 		if attempt == 1 {
-			fmt.Printf("⏳ Formation server at %s not ready, retrying every %s (up to %s)...\n",
+			fmt.Printf("[INFO] Formation server at %s not ready, retrying every %s (up to %s)...\n",
 				leaderHost, joinRetryInterval, joinTimeout)
 		}
 		time.Sleep(joinRetryInterval)
@@ -2230,7 +2230,7 @@ func runAdminJoin(cmd *cobra.Command, args []string) {
 	body, err := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "❌ Error reading response body: %v\n", err)
+		fmt.Fprintf(os.Stderr, "[ERROR] Error reading response body: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -2241,11 +2241,11 @@ func runAdminJoin(cmd *cobra.Command, args []string) {
 	}
 
 	if !joinResp.Success {
-		fmt.Fprintf(os.Stderr, "❌ Failed to join cluster: %s\n", joinResp.Message)
+		fmt.Fprintf(os.Stderr, "[ERROR] Failed to join cluster: %s\n", joinResp.Message)
 		os.Exit(1)
 	}
 
-	fmt.Printf("✅ Registered with formation server (%d/%d nodes joined)\n", joinResp.Joined, joinResp.Expected)
+	fmt.Printf("[OK] Registered with formation server (%d/%d nodes joined)\n", joinResp.Joined, joinResp.Expected)
 
 	// Poll status until formation is complete
 	statusURL := fmt.Sprintf("https://%s/formation/status", leaderHost)
@@ -2254,35 +2254,35 @@ func runAdminJoin(cmd *cobra.Command, args []string) {
 	for {
 		statusReq, err := http.NewRequest(http.MethodGet, statusURL, nil)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "❌ Error creating status request: %v\n", err)
+			fmt.Fprintf(os.Stderr, "[ERROR] Error creating status request: %v\n", err)
 			os.Exit(1)
 		}
 		statusReq.Header.Set("Authorization", "Bearer "+joinToken)
 
 		sResp, err := client.Do(statusReq)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "❌ Error polling formation status: %v\n", err)
+			fmt.Fprintf(os.Stderr, "[ERROR] Error polling formation status: %v\n", err)
 			os.Exit(1)
 		}
 
 		sBody, err := io.ReadAll(sResp.Body)
 		sResp.Body.Close()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "❌ Error reading status response: %v\n", err)
+			fmt.Fprintf(os.Stderr, "[ERROR] Error reading status response: %v\n", err)
 			os.Exit(1)
 		}
 
 		if sResp.StatusCode == http.StatusUnauthorized {
-			fmt.Fprintf(os.Stderr, "❌ Error: join token rejected by formation server (expired or invalid)\n")
+			fmt.Fprintf(os.Stderr, "[ERROR] Error: join token rejected by formation server (expired or invalid)\n")
 			os.Exit(1)
 		}
 		if sResp.StatusCode != http.StatusOK {
-			fmt.Fprintf(os.Stderr, "❌ Error: unexpected status %d from formation server\n", sResp.StatusCode)
+			fmt.Fprintf(os.Stderr, "[ERROR] Error: unexpected status %d from formation server\n", sResp.StatusCode)
 			os.Exit(1)
 		}
 
 		if err := json.Unmarshal(sBody, &statusResp); err != nil {
-			fmt.Fprintf(os.Stderr, "❌ Error parsing status response: %v\n", err)
+			fmt.Fprintf(os.Stderr, "[ERROR] Error parsing status response: %v\n", err)
 			os.Exit(1)
 		}
 
@@ -2294,7 +2294,7 @@ func runAdminJoin(cmd *cobra.Command, args []string) {
 		time.Sleep(500 * time.Millisecond)
 	}
 
-	fmt.Printf("✅ Cluster formation complete! (%d nodes)\n\n", statusResp.Expected)
+	fmt.Printf("[OK] Cluster formation complete! (%d nodes)\n\n", statusResp.Expected)
 
 	// Fire telemetry after formation (now we know the cluster topology)
 	noTelemetry, _ := cmd.Flags().GetBool("no-telemetry")
@@ -2324,17 +2324,17 @@ func runAdminJoin(cmd *cobra.Command, args []string) {
 	// Extract credentials and CA from formation status
 	creds := statusResp.Credentials
 	if creds == nil {
-		fmt.Fprintf(os.Stderr, "❌ Error: formation server did not return credentials\n")
+		fmt.Fprintf(os.Stderr, "[ERROR] Error: formation server did not return credentials\n")
 		os.Exit(1)
 	}
 
 	// Removed only once formation has succeeded, so a failed join leaves the
 	// node's single-node cluster intact.
 	if err := discardJetStreamStore(storeDir); err != nil {
-		fmt.Fprintf(os.Stderr, "❌ Error: %v\n", err)
+		fmt.Fprintf(os.Stderr, "[ERROR] Error: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("✅ Discarded this node's pre-formation JetStream store: %s\n", storeDir)
+	fmt.Printf("[OK] Discarded this node's pre-formation JetStream store: %s\n", storeDir)
 
 	// Set up config directory
 	if configDir == "" {
@@ -2351,7 +2351,7 @@ func runAdminJoin(cmd *cobra.Command, args []string) {
 	caKeyPath := filepath.Join(configDir, "ca.key")
 
 	if statusResp.CACert == "" || statusResp.CAKey == "" {
-		fmt.Fprintf(os.Stderr, "❌ Error: formation server did not return CA certificate\n")
+		fmt.Fprintf(os.Stderr, "[ERROR] Error: formation server did not return CA certificate\n")
 		os.Exit(1)
 	}
 
@@ -2363,42 +2363,42 @@ func runAdminJoin(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "Error writing CA key: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("✅ CA certificate received from leader: %s\n", caCertPath)
+	fmt.Printf("[OK] CA certificate received from leader: %s\n", caCertPath)
 
 	// Install CA certificate into system trust store
 	installCACertificate(caCertPath)
 
 	// Extract and write master key from formation server
 	if statusResp.MasterKey == "" {
-		fmt.Fprintf(os.Stderr, "❌ Error: formation server did not return master key\n")
+		fmt.Fprintf(os.Stderr, "[ERROR] Error: formation server did not return master key\n")
 		os.Exit(1)
 	}
 	masterKeyBytes, err := base64.StdEncoding.DecodeString(statusResp.MasterKey)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "❌ Error decoding master key: %v\n", err)
+		fmt.Fprintf(os.Stderr, "[ERROR] Error decoding master key: %v\n", err)
 		os.Exit(1)
 	}
 	bootstrapDir := filepath.Join(dataDir, "awsgw")
 	if err := writeBootstrapFilesWithAdmin(configDir, bootstrapDir, masterKeyBytes, creds.AccessKey, creds.SecretKey, creds.AccountID, creds.AdminAccessKey, creds.AdminSecretKey); err != nil {
-		fmt.Fprintf(os.Stderr, "❌ Error writing bootstrap files: %v\n", err)
+		fmt.Fprintf(os.Stderr, "[ERROR] Error writing bootstrap files: %v\n", err)
 		os.Exit(1)
 	}
 	if err := writeSystemCredentials(configDir, creds.AccessKey, creds.SecretKey); err != nil {
-		fmt.Fprintf(os.Stderr, "❌ Error writing system credentials: %v\n", err)
+		fmt.Fprintf(os.Stderr, "[ERROR] Error writing system credentials: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Println("✅ IAM master key received from leader")
-	fmt.Printf("✅ Bootstrap file written: %s\n", filepath.Join(bootstrapDir, "bootstrap.json"))
+	fmt.Println("[OK] IAM master key received from leader")
+	fmt.Printf("[OK] Bootstrap file written: %s\n", filepath.Join(bootstrapDir, "bootstrap.json"))
 
 	// Predastore encryption key is per-node: generate locally rather than
 	// receiving from the leader. Each node only opens fragments it sealed
 	// itself, so there is no cluster-wide predastore key to share.
 	predastoreKeyPath, err := writePredastoreEncryptionKey(configDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "❌ Error generating predastore encryption key: %v\n", err)
+		fmt.Fprintf(os.Stderr, "[ERROR] Error generating predastore encryption key: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("✅ Predastore encryption key generated: %s\n", predastoreKeyPath)
+	fmt.Printf("[OK] Predastore encryption key generated: %s\n", predastoreKeyPath)
 
 	// Viperblock at-rest encryption key is cluster-wide: receive it from the
 	// leader rather than generating one, so this node can open volumes sealed
@@ -2407,19 +2407,19 @@ func runAdminJoin(cmd *cobra.Command, args []string) {
 	// the join.
 	var viperblockKeyPath string
 	if statusResp.ViperblockKey == "" {
-		fmt.Println("⚠️  Leader did not provide a viperblock encryption key; at-rest encryption disabled on this node")
+		fmt.Println("[WARNING]  Leader did not provide a viperblock encryption key; at-rest encryption disabled on this node")
 	} else {
 		viperblockKeyBytes, err := base64.StdEncoding.DecodeString(statusResp.ViperblockKey)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "❌ Error decoding viperblock encryption key: %v\n", err)
+			fmt.Fprintf(os.Stderr, "[ERROR] Error decoding viperblock encryption key: %v\n", err)
 			os.Exit(1)
 		}
 		viperblockKeyPath, err = saveViperblockEncryptionKey(configDir, viperblockKeyBytes)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "❌ Error saving viperblock encryption key: %v\n", err)
+			fmt.Fprintf(os.Stderr, "[ERROR] Error saving viperblock encryption key: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Printf("✅ Viperblock encryption key received from leader: %s\n", viperblockKeyPath)
+		fmt.Printf("[OK] Viperblock encryption key received from leader: %s\n", viperblockKeyPath)
 	}
 
 	// Generate server cert signed by CA with this node's bind IP
@@ -2427,7 +2427,7 @@ func runAdminJoin(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "Error generating server certificate: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("✅ Server certificate generated with bind IP: %s\n\n", bindIP)
+	fmt.Printf("[OK] Server certificate generated with bind IP: %s\n\n", bindIP)
 
 	// Match the leader's intra-AZ IPsec posture: NetworkConfig.IPSecEnabled is
 	// authoritative. When the formation response omits NetworkConfig entirely
@@ -2444,7 +2444,7 @@ func runAdminJoin(cmd *cobra.Command, args []string) {
 			fmt.Fprintf(os.Stderr, "Error generating IPsec peer certificate: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Println("🔐 IPsec peer certificate generated (intra-AZ Geneve encryption ON)")
+		fmt.Println("[INFO] IPsec peer certificate generated (intra-AZ Geneve encryption ON)")
 	}
 
 	// Build cluster topology from formation data
@@ -2452,7 +2452,7 @@ func runAdminJoin(cmd *cobra.Command, args []string) {
 	predastoreNodes := formation.BuildPredastoreNodes(statusResp.Nodes)
 	ovnNBAddr, ovnSBAddr := formation.BuildOVNDBAddrs(statusResp.Nodes)
 
-	fmt.Println("📝 Creating configuration files...")
+	fmt.Println("[INFO] Creating configuration files...")
 
 	dirs, err := createConfigSubdirs(configDir)
 	if err != nil {
@@ -2486,10 +2486,10 @@ func runAdminJoin(cmd *cobra.Command, args []string) {
 
 		predastoreHostID = admin.FindNodeIDByIP(predastoreNodes, bindIP)
 		if predastoreHostID == 0 {
-			fmt.Fprintf(os.Stderr, "❌ Error: bind IP %s not found in predastore node list\n", bindIP)
+			fmt.Fprintf(os.Stderr, "[ERROR] Error: bind IP %s not found in predastore node list\n", bindIP)
 			os.Exit(1)
 		}
-		fmt.Printf("✅ Created: multi-node predastore.toml (host ID: %d)\n", predastoreHostID)
+		fmt.Printf("[OK] Created: multi-node predastore.toml (host ID: %d)\n", predastoreHostID)
 	}
 
 	spinifexTomlPath := filepath.Join(configDir, "spinifex.toml")
@@ -2551,7 +2551,7 @@ func runAdminJoin(cmd *cobra.Command, args []string) {
 	configureHostDNS(configSettings, skipHostDNS)
 
 	// Print cluster summary
-	fmt.Println("\n🎉 Node successfully joined cluster!")
+	fmt.Println("\n[INFO] Node successfully joined cluster!")
 	fmt.Printf("   Cluster: %s (%d nodes)\n", creds.ClusterName, len(statusResp.Nodes))
 	fmt.Printf("   Bind: %s  Advertise: %s  Loopback: 127.0.0.1\n", bindIP, advertiseIP)
 	fmt.Println("   Nodes:")
@@ -2581,7 +2581,7 @@ func resolveAdvertiseIP(bindIP, advertiseFlag string, detected *admin.DetectedNe
 		return detected.WAN.IP, nil
 	}
 	fmt.Fprintln(os.Stderr,
-		"⚠️  Could not auto-detect a WAN IP. Off-host clients (ALB VMs, remote operators) "+
+		"[WARNING]  Could not auto-detect a WAN IP. Off-host clients (ALB VMs, remote operators) "+
 			"will not be able to reach this node. Re-run with --advertise <IP> to fix.")
 	return "127.0.0.1", nil
 }
@@ -2841,9 +2841,9 @@ func runCertRenew(cmd *cobra.Command, _ []string) {
 		os.Exit(1)
 	}
 
-	fmt.Println("✅ Server certificate regenerated with current IPs and hostname")
+	fmt.Println("[OK] Server certificate regenerated with current IPs and hostname")
 	fmt.Printf("   Certificate: %s\n", serverCertPath)
-	fmt.Println("\n⚠️  Restart awsgw and daemon services to pick up the new certificate.")
+	fmt.Println("\n[WARNING]  Restart awsgw and daemon services to pick up the new certificate.")
 }
 
 // configDirs holds the paths to config subdirectories created by createConfigSubdirs.
@@ -2996,13 +2996,13 @@ func configureHostDNS(settings admin.ConfigSettings, skip bool) {
 	if !ok {
 		return
 	}
-	fmt.Println("\n🔧 Configuring host DNS for Spinifex zones...")
+	fmt.Println("\n[INFO] Configuring host DNS for Spinifex zones...")
 	if err := hostdns.Configure(params); err != nil {
-		fmt.Fprintf(os.Stderr, "⚠️  Warning: could not configure host DNS: %v\n", err)
+		fmt.Fprintf(os.Stderr, "[WARNING]  Warning: could not configure host DNS: %v\n", err)
 		fmt.Fprintf(os.Stderr, "    LB/EKS names may not resolve from this node until the host resolver points at %s:53.\n", params.ResolverIP)
 		return
 	}
-	fmt.Printf("✅ Host DNS: %s + %s -> %s:53 (northstar)\n", params.BaseDomain, params.InternalDomain, params.ResolverIP)
+	fmt.Printf("[OK] Host DNS: %s + %s -> %s:53 (northstar)\n", params.BaseDomain, params.InternalDomain, params.ResolverIP)
 }
 
 // finalizeNodeSetup configures AWS credentials, creates service directories,
@@ -3518,7 +3518,7 @@ func installCACertificate(caPemPath string) {
 		return
 	}
 
-	fmt.Printf("✅ CA certificate installed to system trust store\n")
+	fmt.Printf("[OK] CA certificate installed to system trust store\n")
 }
 
 // runAdminBanner writes the Spinifex console banner to /etc/motd.

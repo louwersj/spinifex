@@ -78,9 +78,9 @@ func runApplianceTeardownGuarded(ctx context.Context, confirmed, purgeMetadata b
 		return "", err
 	}
 	if purgeMetadata {
-		return "✅ Platform appliance torn down, index/KB metadata purged.", nil
+		return "[OK] Platform appliance torn down, index/KB metadata purged.", nil
 	}
-	return "✅ Platform appliance torn down.", nil
+	return "[OK] Platform appliance torn down.", nil
 }
 
 func runOchreApplianceTeardown(cmd *cobra.Command, _ []string) {

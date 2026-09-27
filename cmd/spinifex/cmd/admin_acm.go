@@ -113,7 +113,7 @@ func runCertCreateTenantCA(cmd *cobra.Command, _ []string) {
 	existed := admin.FileExists(certPath) && admin.FileExists(keyPath)
 
 	if existed && regenerate {
-		fmt.Println("⚠️  About to regenerate the tenant CA. This invalidates trust for every")
+		fmt.Println("[WARNING]  About to regenerate the tenant CA. This invalidates trust for every")
 		fmt.Println("   device that has installed the current root — each one will need the new")
 		fmt.Println("   certificate reinstalled before it trusts PRIVATE_CA leaves again.")
 		fmt.Printf("   Current CA:      %s\n", certPath)
@@ -151,9 +151,9 @@ func runCertCreateTenantCA(cmd *cobra.Command, _ []string) {
 	}
 
 	if existed && !regenerate {
-		fmt.Println("✅ No changes made.")
+		fmt.Println("[OK] No changes made.")
 	} else {
-		fmt.Println("✅ Tenant CA ready.")
+		fmt.Println("[OK] Tenant CA ready.")
 	}
 	fmt.Printf("   Certificate:      %s\n", certPath)
 	fmt.Printf("   Key:              %s (0600)\n", keyPath)

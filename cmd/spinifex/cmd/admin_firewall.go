@@ -30,7 +30,7 @@ func openFormationPort(port int) func() {
 	}
 
 	if err := runFirewallHelper("open-port", port); err != nil {
-		fmt.Printf("⚠️  Could not open port %d in the host firewall: %v\n", port, err)
+		fmt.Printf("[WARNING]  Could not open port %d in the host firewall: %v\n", port, err)
 		fmt.Printf("   Joining nodes may be unable to reach the formation server.\n")
 		return func() {}
 	}

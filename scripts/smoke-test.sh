@@ -45,11 +45,11 @@ while [[ $# -gt 0 ]]; do
         --nodes)      NODES="$2"; shift 2 ;;
         --keep)       KEEP=1; shift ;;
         -h|--help)    sed -n '2,32p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
-        *)            echo "❌ Unknown option: $1 (try --help)" >&2; exit 2 ;;
+        *)            echo "[ERROR] Unknown option: $1 (try --help)" >&2; exit 2 ;;
     esac
 done
 
-[[ "$NODES" =~ ^[0-9]+$ ]] && [ "$NODES" -ge 1 ] || { echo "❌ --nodes must be >= 1" >&2; exit 2; }
+[[ "$NODES" =~ ^[0-9]+$ ]] && [ "$NODES" -ge 1 ] || { echo "[ERROR] --nodes must be >= 1" >&2; exit 2; }
 
 VPC_CIDR="${VPC_CIDR:-10.200.0.0/16}"
 SUBNET_CIDR="${SUBNET_CIDR:-10.200.1.0/24}"
@@ -76,7 +76,7 @@ while [ $DAEMON_ELAPSED -lt $DAEMON_TIMEOUT ]; do
     DAEMON_ELAPSED=$((DAEMON_ELAPSED + 2))
 done
 if [ $DAEMON_ELAPSED -ge $DAEMON_TIMEOUT ]; then
-    echo "❌ EC2 daemon not ready after ${DAEMON_TIMEOUT}s"
+    echo "[ERROR] EC2 daemon not ready after ${DAEMON_TIMEOUT}s"
     exit 1
 fi
 echo "   EC2 daemon ready after ${DAEMON_ELAPSED}s"
@@ -98,7 +98,7 @@ aws_as_user ec2 describe-key-pairs
 if [[ "$TEST_GPU" == "1" ]]; then
     echo "==> [GPU] Checking IOMMU"
     if ! dmesg | grep -qi "DMAR.*IOMMU enabled\|iommu.*Translated\|Adding to iommu group\|AMD-Vi.*enabled"; then
-        echo "❌ IOMMU not detected — add intel_iommu=on (or amd_iommu=on) and iommu=pt to kernel cmdline, then reboot"
+        echo "[ERROR] IOMMU not detected — add intel_iommu=on (or amd_iommu=on) and iommu=pt to kernel cmdline, then reboot"
         exit 1
     fi
     echo "   IOMMU active"
@@ -107,7 +107,7 @@ if [[ "$TEST_GPU" == "1" ]]; then
     if [[ -z "$GPU_VENDOR_ID" || -z "$GPU_DEVICE_ID" ]]; then
         GPU_LINE=$(lspci -nn | grep -i nvidia | grep -iE "VGA|3D" | head -1)
         if [[ -z "$GPU_LINE" ]]; then
-            echo "❌ No NVIDIA GPU found via lspci — is the card seated and detectable?"
+            echo "[ERROR] No NVIDIA GPU found via lspci — is the card seated and detectable?"
             lspci | grep -i nvidia >&2 || true
             exit 1
         fi
@@ -123,7 +123,7 @@ if [[ "$TEST_GPU" == "1" ]]; then
         --query "InstanceTypes[?starts_with(InstanceType, \`${GPU_FAMILY}\`)].InstanceType" \
         --output text 2>/dev/null || true)
     if [[ -z "$G5_TYPES" ]]; then
-        echo "❌ No ${GPU_FAMILY}.* instance types returned by describe-instance-types"
+        echo "[ERROR] No ${GPU_FAMILY}.* instance types returned by describe-instance-types"
         exit 1
     fi
     echo "   ${GPU_FAMILY} types available: $G5_TYPES"
@@ -212,7 +212,7 @@ if [ "$CREATE_VPC" = "1" ]; then
     echo "==> Creating VPC $VPC_CIDR"
     CREATED_VPC_ID=$(aws_as_user ec2 create-vpc --cidr-block "$VPC_CIDR" \
         --query 'Vpc.VpcId' --output text)
-    [ -n "$CREATED_VPC_ID" ] && [ "$CREATED_VPC_ID" != "None" ] || { echo "❌ create-vpc failed"; exit 1; }
+    [ -n "$CREATED_VPC_ID" ] && [ "$CREATED_VPC_ID" != "None" ] || { echo "[ERROR] create-vpc failed"; exit 1; }
     echo "  VPC: $CREATED_VPC_ID"
 
     echo "==> Creating and attaching internet gateway"
@@ -243,7 +243,7 @@ if [ "$CREATE_VPC" = "1" ]; then
         --filters "Name=vpc-id,Values=$CREATED_VPC_ID" "Name=group-name,Values=default" \
         --query 'SecurityGroups[0].GroupId' --output text)
     [ -n "$CREATED_SG_ID" ] && [ "$CREATED_SG_ID" != "None" ] ||
-        { echo "❌ No default security group in $CREATED_VPC_ID"; exit 1; }
+        { echo "[ERROR] No default security group in $CREATED_VPC_ID"; exit 1; }
     aws_as_user ec2 authorize-security-group-ingress \
         --group-id "$CREATED_SG_ID" --protocol tcp --port 22 --cidr 0.0.0.0/0 >/dev/null 2>&1 || true
     aws_as_user ec2 authorize-security-group-ingress \
@@ -266,7 +266,7 @@ AMI_ID=$(aws_as_user ec2 describe-images \
     --output text)
 
 if [ -z "$AMI_ID" ] || [ "$AMI_ID" = "None" ]; then
-    echo "❌ No AMI found"
+    echo "[ERROR] No AMI found"
     exit 1
 fi
 
@@ -276,7 +276,7 @@ else
     SUBNET_ID=$(aws_as_user ec2 describe-subnets --query 'Subnets[?MapPublicIpOnLaunch==`true`].SubnetId | [0]' --output text)
 fi
 if [ -z "$SUBNET_ID" ] || [ "$SUBNET_ID" = "None" ]; then
-    echo "❌ No subnet found"
+    echo "[ERROR] No subnet found"
     exit 1
 fi
 
@@ -305,7 +305,7 @@ if ! ALL_IDS=$(aws_as_user ec2 run-instances \
     "${PLACEMENT_ARGS[@]}" \
     --query 'Instances[].InstanceId' --output text); then
     if [ "$NODES" -gt 1 ]; then
-        echo "❌ run-instances failed. On a spread placement group this usually means"
+        echo "[ERROR] run-instances failed. On a spread placement group this usually means"
         echo "   fewer than $NODES nodes had capacity, so the cluster could not place one"
         echo "   instance per physical server. Check 'sudo spx get nodes'."
     fi
@@ -315,7 +315,7 @@ LAUNCHED_IDS="$ALL_IDS"
 
 INSTANCE_ID=$(awk '{print $1}' <<<"$ALL_IDS")
 if [ -z "$INSTANCE_ID" ] || [ "$INSTANCE_ID" = "None" ] || [ "$INSTANCE_ID" = "null" ]; then
-    echo "❌ run-instances returned no InstanceId"
+    echo "[ERROR] run-instances returned no InstanceId"
     exit 1
 fi
 echo "  Instance ID: $INSTANCE_ID"
@@ -331,14 +331,14 @@ while [ $COUNT -lt 60 ]; do
     STATE=$(echo "$DESCRIBE" | jq -r '.Reservations[0].Instances[0].State.Name // "not-found"')
     [ "$STATE" = "running" ] && break
     if [ "$STATE" = "terminated" ]; then
-        echo "❌ Instance terminated unexpectedly"
+        echo "[ERROR] Instance terminated unexpectedly"
         exit 1
     fi
     sleep 2
     COUNT=$((COUNT + 1))
 done
 if [ "$STATE" != "running" ]; then
-    echo "❌ Instance failed to reach running state (last: $STATE)"
+    echo "[ERROR] Instance failed to reach running state (last: $STATE)"
     exit 1
 fi
 echo "  Instance is running"
@@ -357,7 +357,7 @@ for _i in $(seq 1 300); do
     sleep 1
 done
 if [ -z "$SSH_INST_HOST" ]; then
-    echo "❌ No public IP assigned after 300s — external networking not working"
+    echo "[ERROR] No public IP assigned after 300s — external networking not working"
     exit 1
 fi
 echo "  Public IP: $SSH_INST_HOST"
@@ -379,7 +379,7 @@ for _i in $(seq 1 300); do
     sleep 1
 done
 if [ $SSH_READY -eq 0 ]; then
-    echo "❌ SSH not ready after 300s"
+    echo "[ERROR] SSH not ready after 300s"
     exit 1
 fi
 echo "  SSH is ready"
@@ -395,7 +395,7 @@ SSH_OUT=$(ssh -o StrictHostKeyChecking=no \
     ubuntu@"$SSH_INST_HOST" 'id && hostname' 2>&1)
 echo "  $SSH_OUT"
 if ! echo "$SSH_OUT" | grep -q "ubuntu"; then
-    echo "❌ Expected ubuntu in SSH output"
+    echo "[ERROR] Expected ubuntu in SSH output"
     exit 1
 fi
 
@@ -415,13 +415,13 @@ if [[ "$TEST_GPU" == "1" ]]; then
         sleep 5
     done
     if [[ $GPU_VISIBLE -eq 0 ]]; then
-        echo "❌ GPU not visible in guest via lspci"
+        echo "[ERROR] GPU not visible in guest via lspci"
         exit 1
     fi
     echo "   GPU visible in guest"
-    echo "✅ Smoke test passed (GPU passthrough) — instance $INSTANCE_ID launched with GPU and verified"
+    echo "[OK] Smoke test passed (GPU passthrough) — instance $INSTANCE_ID launched with GPU and verified"
 else
-    echo "✅ Smoke test passed — instance $INSTANCE_ID launched, running, and SSH-verified"
+    echo "[OK] Smoke test passed — instance $INSTANCE_ID launched, running, and SSH-verified"
 fi
 
 # --- Multi-node placement ---
@@ -447,10 +447,10 @@ if [ "$NODES" -gt 1 ]; then
     sort <<<"$PLACED" | uniq -c | awk '{printf "  %s: %s instance(s)\n", $2, $1}'
     DISTINCT=$(sort -u <<<"$PLACED" | grep -c . || true)
     if [ "$DISTINCT" -ne "$NODES" ]; then
-        echo "❌ $NODES instances landed on $DISTINCT node(s), expected one each."
+        echo "[ERROR] $NODES instances landed on $DISTINCT node(s), expected one each."
         echo "   The spread placement group reserved distinct nodes, so the instances"
         echo "   did not end up where the reservation said they would."
         exit 1
     fi
-    echo "✅ Placement confirmed — one instance on each of $DISTINCT physical nodes"
+    echo "[OK] Placement confirmed — one instance on each of $DISTINCT physical nodes"
 fi

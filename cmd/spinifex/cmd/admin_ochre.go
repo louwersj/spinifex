@@ -744,14 +744,14 @@ func runStageWeights(ctx context.Context, store objectstore.ObjectStore, weights
 	}
 
 	if replacingMissingSnapshot {
-		return fmt.Sprintf("✅ Staged %s from %s (snapshot %s). Replaced MISSING snapshot %s -- it was no longer present in the snapshot store.",
+		return fmt.Sprintf("[OK] Staged %s from %s (snapshot %s). Replaced MISSING snapshot %s -- it was no longer present in the snapshot store.",
 			modelID, sourceURI, snapshotID, existing.SnapshotID), nil
 	}
 	if hadPrevious {
-		return fmt.Sprintf("✅ Staged %s from %s (snapshot %s). Replaced previous snapshot %s -- reclaim it separately if no longer needed.",
+		return fmt.Sprintf("[OK] Staged %s from %s (snapshot %s). Replaced previous snapshot %s -- reclaim it separately if no longer needed.",
 			modelID, sourceURI, snapshotID, existing.SnapshotID), nil
 	}
-	return fmt.Sprintf("✅ Staged %s from %s (snapshot %s).", modelID, sourceURI, snapshotID), nil
+	return fmt.Sprintf("[OK] Staged %s from %s (snapshot %s).", modelID, sourceURI, snapshotID), nil
 }
 
 // materializeWeightsVolume is the real weightsMaterializer: it packages
@@ -989,7 +989,7 @@ func runOchreWeightsRemove(cmd *cobra.Command, _ []string) {
 		ochreExit(1)
 		return
 	}
-	fmt.Printf("✅ Removed staged-weights entry for %s (snapshot %s and source objects untouched).\n", modelID, entry.SnapshotID)
+	fmt.Printf("[OK] Removed staged-weights entry for %s (snapshot %s and source objects untouched).\n", modelID, entry.SnapshotID)
 }
 
 // resolveHFToken applies pull's token resolution order (D2): the --hf-token
@@ -1050,7 +1050,7 @@ func runOchreWeightsPull(cmd *cobra.Command, _ []string) {
 		ochreExit(1)
 		return
 	}
-	fmt.Printf("✅ Pulled into %s\n", finalURI)
+	fmt.Printf("[OK] Pulled into %s\n", finalURI)
 	fmt.Println(finalURI)
 }
 
@@ -1125,7 +1125,7 @@ func runOchreCredentialsSet(cmd *cobra.Command, _ []string) {
 		ochreExit(1)
 		return
 	}
-	fmt.Printf("✅ Stored %s credential for account %s\n", vendor, accountID)
+	fmt.Printf("[OK] Stored %s credential for account %s\n", vendor, accountID)
 }
 
 var adminOchreAccessCmd = &cobra.Command{
@@ -1260,7 +1260,7 @@ func runOchreAccessChange(cmd *cobra.Command, grant bool) {
 			ochreExit(1)
 			return
 		}
-		fmt.Printf("✅ %s %s → %s\n", verb, accountID, modelID)
+		fmt.Printf("[OK] %s %s → %s\n", verb, accountID, modelID)
 	}
 }
 

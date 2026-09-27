@@ -214,7 +214,7 @@ func runBackupAccount(ctx context.Context, accountID string, backup func(context
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("✅ Backed up account %s to %s (%d bytes).", accountID, out.ObjectKey, out.SizeBytes), nil
+	return fmt.Sprintf("[OK] Backed up account %s to %s (%d bytes).", accountID, out.ObjectKey, out.SizeBytes), nil
 }
 
 // runRestoreAccount is the testable core of 'ochre vector restore'.
@@ -222,7 +222,7 @@ func runRestoreAccount(ctx context.Context, accountID, objectKey string, restore
 	if err := restore(ctx, accountID, objectKey); err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("✅ Restored account %s from %s.", accountID, objectKey), nil
+	return fmt.Sprintf("[OK] Restored account %s from %s.", accountID, objectKey), nil
 }
 
 // formatIndexRecord renders one index record as aligned key/value lines.
@@ -337,7 +337,7 @@ func runIndexCreate(ctx context.Context, svc handlers_ochrevector.VectorService,
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("✅ Created index %s.\n\n%s", out.Index.ID, formatIndexRecord(out.Index)), nil
+	return fmt.Sprintf("[OK] Created index %s.\n\n%s", out.Index.ID, formatIndexRecord(out.Index)), nil
 }
 
 // runIndexDelete is the testable core of 'ochre vector index delete'.
@@ -345,7 +345,7 @@ func runIndexDelete(ctx context.Context, svc handlers_ochrevector.VectorService,
 	if _, err := svc.DeleteIndex(ctx, &handlers_ochrevector.DeleteIndexRequest{IndexID: indexID}, utils.GlobalAccountID); err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("✅ Index %s deleted.", indexID), nil
+	return fmt.Sprintf("[OK] Index %s deleted.", indexID), nil
 }
 
 // listIndexesOutput renders 'ochre vector index list'. Split from its Run
@@ -382,7 +382,7 @@ func runIngest(ctx context.Context, svc handlers_ochrevector.VectorService, inde
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("✅ Started ingestion job %s for index %s (state %s).", out.Job.ID, indexID, out.Job.State), nil
+	return fmt.Sprintf("[OK] Started ingestion job %s for index %s (state %s).", out.Job.ID, indexID, out.Job.State), nil
 }
 
 // runJobDescribe is the testable core of 'ochre vector job describe'.

@@ -232,7 +232,7 @@ lspci_out=$(_ssh 'lspci -nn 2>/dev/null' || true)
 if printf '%s\n' "$lspci_out" | grep -qiE "1002:|10de:|Instinct|Aqua|Processing accelerator|NVIDIA"; then
     printf '%s\n' "$lspci_out" \
         | grep -iE "1002:|10de:|Instinct|Aqua|Processing accelerator|NVIDIA" \
-        | sed 's/^/   ✓ /'
+        | sed 's/^/   [OK] /'
 else
     echo "   WARNING: GPU not visible in lspci — check host-side passthrough assignment"
     printf '%s\n' "$lspci_out" | head -20 | sed 's/^/   /'
@@ -240,7 +240,7 @@ fi
 
 # --- Done ---
 echo ""
-echo "✅ ${INSTANCE_TYPE} ready — ${ID} (${IP})"
+echo "[OK] ${INSTANCE_TYPE} ready — ${ID} (${IP})"
 echo ""
 echo "   ssh -i ${SSH_KEY} -o StrictHostKeyChecking=no ${SSH_USER}@${IP}"
 echo ""

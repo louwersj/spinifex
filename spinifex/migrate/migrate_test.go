@@ -64,7 +64,7 @@ func TestRegistry_RejectsDuplicateVersions(t *testing.T) {
 	err = r.RunKV(t.Context(), "test-bucket", kv, 2)
 	// Should succeed (first 1→2 runs, second is filtered out since FromVersion < current after first runs).
 	// Actually with our filtering, both have FromVersion=1 >= current=1 and ToVersion=2 <= target=2,
-	// so both are in pending. Chain validation: expected=1, first.From=1 ✓, expected=2, second.From=1 ✗.
+	// so both are pending. Chain validation accepts first.From=1 and rejects second.From=1.
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "gap")
 }

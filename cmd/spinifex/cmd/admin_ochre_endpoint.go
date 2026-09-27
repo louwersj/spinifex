@@ -258,7 +258,7 @@ func runEnsureEndpoint(ctx context.Context, svc handlers_bedrock.EndpointService
 	if err != nil {
 		return "", fmt.Errorf("after %s: %w\n\n%s", elapsed.Round(time.Second), err, formatEndpointRecord(rec))
 	}
-	return fmt.Sprintf("✅ Endpoint for %s is READY after %s.\n\n%s", modelID, elapsed.Round(time.Second), formatEndpointRecord(rec)), nil
+	return fmt.Sprintf("[OK] Endpoint for %s is READY after %s.\n\n%s", modelID, elapsed.Round(time.Second), formatEndpointRecord(rec)), nil
 }
 
 // endpointServiceFn indirects the NATS-backed client so the Run functions'

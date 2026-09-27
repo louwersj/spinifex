@@ -152,8 +152,13 @@ install-microvm: $(MICROVM_ARTIFACTS) ## Install microVM artifacts to /usr/share
 # the pre-commit gate: manifest checks, lint, vuln, and the unit and e2e-harness tiers.
 # integration and race tests skipped to keep quick, they run in CI.
 preflight:
-	@$(MAKE) --no-print-directory QUIET=1 manifest-check manifest-lint lint govulncheck test-cover diff-coverage test-package-check test-harness test-build-scripts test-platform
-	@echo -e "\n ✅ Preflight passed — safe to commit."
+	@$(MAKE) --no-print-directory QUIET=1 manifest-check manifest-lint lint govulncheck test-cover diff-coverage test-package-check test-harness test-build-scripts test-platform no-emoji
+	@echo -e "\n[OK] Preflight passed — safe to commit."
+
+# Human and machine-readable command output uses plain ASCII status markers.
+# Keep this in preflight so an emoji cannot be reintroduced unnoticed.
+no-emoji:
+	./scripts/check-no-emoji.sh
 
 # Shell suites + shellcheck for build/scripts/, the systemd-unit helpers that
 # ship on every node (unlike scripts/images/, kept in preflight: a wrong
@@ -374,7 +379,7 @@ install-aws:
 	fi
 
 quickinstall: install-system install-go install-aws
-	@echo -e "\n✅ Quickinstall complete for $(ARCH)."
+	@echo -e "\n[OK] Quickinstall complete for $(ARCH)."
 	@echo "   Please ensure /usr/local/go/bin is in your PATH."
 
 lint:

@@ -101,7 +101,7 @@ _ssh "$DASHBOARD_IP" "
 "
 
 echo ""
-echo "✅ Demo deployed"
+echo "[OK] Demo deployed"
 echo ""
 echo "   Dashboard:  http://${DASHBOARD_IP}:8000"
 echo "   YOLO feed:  http://${YOLO_IP}:8080/video"

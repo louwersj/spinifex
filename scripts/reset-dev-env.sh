@@ -55,7 +55,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 INVOKING_USER="${SUDO_USER:-$(id -un)}"
 INVOKING_HOME=$(getent passwd "$INVOKING_USER" | cut -d: -f6)
 if [ -z "$INVOKING_HOME" ]; then
-    echo "❌ Could not resolve home directory for user: $INVOKING_USER"
+    echo "[ERROR] Could not resolve home directory for user: $INVOKING_USER"
     exit 1
 fi
 
@@ -84,7 +84,7 @@ done
 if [ -n "$DEV_PROFILE" ]; then
     PROFILE_FILE="$SCRIPT_DIR/dev-env/${DEV_PROFILE}.conf"
     if [ ! -f "$PROFILE_FILE" ]; then
-        echo "❌ No such profile: $DEV_PROFILE ($PROFILE_FILE)"
+        echo "[ERROR] No such profile: $DEV_PROFILE ($PROFILE_FILE)"
         echo "   Available:"
         for f in "$SCRIPT_DIR"/dev-env/*.conf; do
             [ -e "$f" ] || continue
@@ -123,7 +123,7 @@ DEV_BIND_PLANES="${DEV_BIND_PLANES:-0}"
 if sudo test -f "$CONFIG_FILE"; then
     NODE_COUNT=$(sudo grep -cE '^\[nodes\.[^.]+\]' "$CONFIG_FILE" 2>/dev/null || echo 0)
     if [ "$NODE_COUNT" -gt 1 ]; then
-        echo "❌ Multi-node cluster detected ($NODE_COUNT nodes in $CONFIG_FILE)."
+        echo "[ERROR] Multi-node cluster detected ($NODE_COUNT nodes in $CONFIG_FILE)."
         echo "   This script only supports single-node dev environments."
         echo "   Reset each node individually or use 'spx admin cluster shutdown'."
         exit 1
@@ -234,7 +234,7 @@ printf '      %-6s %-10s %s\n' mgmt "$DEV_MGMT_BRIDGE" "$DEV_MGMT_CIDR"
 
 # --- Preflight ---
 PREFLIGHT_FAIL=0
-fail() { echo "❌ $*"; PREFLIGHT_FAIL=1; }
+fail() { echo "[ERROR] $*"; PREFLIGHT_FAIL=1; }
 
 if [ "$DEV_UPLINK" != "bridged" ] && [ "$DEV_UPLINK" != "nat" ]; then
     fail "DEV_UPLINK must be 'bridged' or 'nat', got: $DEV_UPLINK"
@@ -368,7 +368,7 @@ timeout=30
 elapsed=0
 while pgrep -x 'qemu-system-x86_64|qemu-system-aarch64' > /dev/null 2>&1; do
     if [ "$elapsed" -ge "$timeout" ]; then
-        echo "❌ QEMU still running after ${timeout}s:"
+        echo "[ERROR] QEMU still running after ${timeout}s:"
         pgrep -af 'qemu-system-' || true
         echo "   Kill them manually and re-run this script."
         exit 1
@@ -532,7 +532,7 @@ while [ $DAEMON_ELAPSED -lt $DAEMON_TIMEOUT ]; do
     DAEMON_ELAPSED=$((DAEMON_ELAPSED + 2))
 done
 if [ $DAEMON_ELAPSED -ge $DAEMON_TIMEOUT ]; then
-    echo "❌ EC2 daemon not ready after ${DAEMON_TIMEOUT}s"
+    echo "[ERROR] EC2 daemon not ready after ${DAEMON_TIMEOUT}s"
     exit 1
 fi
 
@@ -544,7 +544,7 @@ DEFAULT_SG_ID=$(aws_as_user ec2 describe-security-groups \
     --filters "Name=vpc-id,Values=$DEFAULT_VPC_ID" "Name=group-name,Values=default" \
     --query 'SecurityGroups[0].GroupId' --output text)
 if [ -z "$DEFAULT_SG_ID" ] || [ "$DEFAULT_SG_ID" = "None" ]; then
-    echo "❌ Could not locate default security group in VPC $DEFAULT_VPC_ID"
+    echo "[ERROR] Could not locate default security group in VPC $DEFAULT_VPC_ID"
     exit 1
 fi
 aws_as_user ec2 authorize-security-group-ingress \

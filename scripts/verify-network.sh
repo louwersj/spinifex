@@ -32,8 +32,8 @@ INVOKING_HOME=$(getent passwd "$INVOKING_USER" | cut -d: -f6)
 aws_as_user() { sudo -u "$INVOKING_USER" env HOME="$INVOKING_HOME" AWS_PROFILE=spinifex aws "$@"; }
 
 FAILURES=0
-pass() { printf '  \033[32m✓\033[0m %s\n' "$*"; }
-fail() { printf '  \033[31m✗\033[0m %s\n' "$*"; FAILURES=$((FAILURES + 1)); }
+pass() { printf '  \033[32m[OK]\033[0m %s\n' "$*"; }
+fail() { printf '  \033[31m[ERROR]\033[0m %s\n' "$*"; FAILURES=$((FAILURES + 1)); }
 skip() { printf '  \033[33m-\033[0m %s\n' "$*"; }
 
 iface_ip() {
@@ -255,8 +255,8 @@ fi
 
 echo ""
 if [ "$FAILURES" -eq 0 ]; then
-    echo "✅ Network verification passed"
+    echo "[OK] Network verification passed"
     exit 0
 fi
-echo "❌ Network verification failed ($FAILURES assertion(s))"
+echo "[ERROR] Network verification failed ($FAILURES assertion(s))"
 exit 1
