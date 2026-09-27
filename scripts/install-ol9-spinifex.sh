@@ -42,6 +42,22 @@ INSTALL_SPINIFEX_OL9_AUTO_INITIALIZE="${INSTALL_SPINIFEX_OL9_AUTO_INITIALIZE:-1}
 INSTALL_SPINIFEX_OL9_NODE="${INSTALL_SPINIFEX_OL9_NODE:-node1}"
 INSTALL_SPINIFEX_OL9_NODES="${INSTALL_SPINIFEX_OL9_NODES:-1}"
 
+# firewalld evaluates before Spinifex's nftables table on OL9. Keep the host
+# firewall in control, but make the locally hosted HTTPS UI reachable on its
+# documented listener. This is idempotent and skipped when firewalld is off.
+configure_ui_firewall() {
+    if ! systemctl is-active --quiet firewalld; then
+        return 0
+    fi
+    echo "[INFO] Allowing Spinifex UI HTTPS through firewalld (TCP 3000)"
+    firewall-cmd --permanent --add-port=3000/tcp >/dev/null
+    firewall-cmd --reload >/dev/null
+    firewall-cmd --quiet --query-port=3000/tcp || {
+        echo "Failed to confirm firewalld access for Spinifex UI TCP 3000." >&2
+        exit 1
+    }
+}
+
 tmpdir=$(mktemp -d)
 trap 'rm -rf "$tmpdir"' EXIT
 installer="$tmpdir/setup.sh"
@@ -54,6 +70,7 @@ chmod 0700 "$installer"
 # before networking and initialization, so explicitly skip it here. Service
 # accounts and all normal setup work are still created by setup.sh.
 INSTALL_SPINIFEX_SKIP_NEWGRP=1 bash "$installer"
+configure_ui_firewall
 if [[ "$INSTALL_SPINIFEX_OL9_AUTO_INITIALIZE" == 1 ]]; then
     echo "[INFO] Configuring safe single-node OVN NAT networking"
     /usr/local/share/spinifex/setup-ovn.sh --management --nat-uplink
