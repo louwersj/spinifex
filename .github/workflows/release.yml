@@ -188,6 +188,11 @@ jobs:
       - name: Create Draft GitHub Release
         uses: softprops/action-gh-release@v3
         with:
+          # Explicitly bind the draft to the pushed tag. Without tag_name the
+          # action can create GitHub's synthetic "untagged-<sha>" draft,
+          # leaving the installer unable to resolve the intended release URL.
+          tag_name: ${{ github.ref_name }}
+          target_commitish: ${{ github.sha }}
           draft: true
           files: |
             artifacts/**/*.tar.gz
@@ -295,7 +300,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [[ "$TAG" =~ -(dev|rc|alpha|beta) ]]; then
+          # Development suffixes may carry a dot counter (for example dev.3).
+          # Treat both `-dev` and `-dev.3` as prereleases.
+          if [[ "$TAG" =~ -(dev|rc|alpha|beta)([.-]|$) ]]; then
             gh release edit "$TAG" --repo "$REPO" --draft=false --prerelease
             echo "Release ${TAG} promoted as prerelease"
           else
