@@ -58,7 +58,10 @@ if [[ "$INSTALL_SPINIFEX_OL9_AUTO_INITIALIZE" == 1 ]]; then
     echo "[INFO] Configuring safe single-node OVN NAT networking"
     /usr/local/share/spinifex/setup-ovn.sh --management --nat-uplink
     echo "[INFO] Initializing single-node Spinifex"
-    spx admin init --node "$INSTALL_SPINIFEX_OL9_NODE" --nodes "$INSTALL_SPINIFEX_OL9_NODES" --external-mode=nat
+    # sudo on EL9 commonly uses secure_path without /usr/local/bin. The
+    # installer places spx there, so use its canonical absolute path instead
+    # of depending on the invoking user's interactive PATH.
+    /usr/local/bin/spx admin init --node "$INSTALL_SPINIFEX_OL9_NODE" --nodes "$INSTALL_SPINIFEX_OL9_NODES" --external-mode=nat
 elif [[ "$INSTALL_SPINIFEX_OL9_AUTO_INITIALIZE" != 0 ]]; then
     echo "INSTALL_SPINIFEX_OL9_AUTO_INITIALIZE must be 0 or 1" >&2
     exit 2
