@@ -34,6 +34,13 @@ fi
 SPINIFEX_RELEASE_REPOSITORY="${INSTALL_SPINIFEX_GITHUB_REPOSITORY:-mulgadc/spinifex}"
 SPINIFEX_RELEASE_REF="${INSTALL_SPINIFEX_VERSION:-main}"
 SPINIFEX_INSTALLER_URL="${SPINIFEX_INSTALLER_URL:-https://raw.githubusercontent.com/${SPINIFEX_RELEASE_REPOSITORY}/${SPINIFEX_RELEASE_REF}/scripts/setup.sh}"
+# A fresh OL9 node normally has one uplink, often the same interface used for
+# SSH. NAT mode is therefore the only safe unattended default: it never moves
+# that uplink into OVS. Operators with a dedicated physical WAN can opt out and
+# run setup-ovn manually with their explicit bridge arguments.
+INSTALL_SPINIFEX_OL9_AUTO_INITIALIZE="${INSTALL_SPINIFEX_OL9_AUTO_INITIALIZE:-1}"
+INSTALL_SPINIFEX_OL9_NODE="${INSTALL_SPINIFEX_OL9_NODE:-node1}"
+INSTALL_SPINIFEX_OL9_NODES="${INSTALL_SPINIFEX_OL9_NODES:-1}"
 
 tmpdir=$(mktemp -d)
 trap 'rm -rf "$tmpdir"' EXIT
@@ -46,6 +53,15 @@ chmod 0700 "$installer"
 # release, enables the Oracle oVirt RPM repositories, writes compatibility
 # units, and starts the target.
 bash "$installer"
+if [[ "$INSTALL_SPINIFEX_OL9_AUTO_INITIALIZE" == 1 ]]; then
+    echo "[INFO] Configuring safe single-node OVN NAT networking"
+    /usr/local/share/spinifex/setup-ovn.sh --management --nat-uplink
+    echo "[INFO] Initializing single-node Spinifex"
+    spx admin init --node "$INSTALL_SPINIFEX_OL9_NODE" --nodes "$INSTALL_SPINIFEX_OL9_NODES" --external-mode=nat
+elif [[ "$INSTALL_SPINIFEX_OL9_AUTO_INITIALIZE" != 0 ]]; then
+    echo "INSTALL_SPINIFEX_OL9_AUTO_INITIALIZE must be 0 or 1" >&2
+    exit 2
+fi
 systemctl enable --now spinifex.target
 systemctl is-active --quiet spinifex.target
 # A systemd target with Wants= dependencies becomes active even if a wanted
