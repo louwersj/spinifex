@@ -49,10 +49,11 @@ installer="$tmpdir/setup.sh"
 curl --fail --silent --show-error --location "$SPINIFEX_INSTALLER_URL" --output "$installer"
 chmod 0700 "$installer"
 
-# setup.sh consumes INSTALL_SPINIFEX_* directly. It installs the selected
-# release, enables the Oracle oVirt RPM repositories, writes compatibility
-# units, and starts the target.
-bash "$installer"
+# setup.sh consumes INSTALL_SPINIFEX_* directly. Its usual interactive
+# `newgrp spinifex` convenience shell would stop this one-command wrapper
+# before networking and initialization, so explicitly skip it here. Service
+# accounts and all normal setup work are still created by setup.sh.
+INSTALL_SPINIFEX_SKIP_NEWGRP=1 bash "$installer"
 if [[ "$INSTALL_SPINIFEX_OL9_AUTO_INITIALIZE" == 1 ]]; then
     echo "[INFO] Configuring safe single-node OVN NAT networking"
     /usr/local/share/spinifex/setup-ovn.sh --management --nat-uplink
