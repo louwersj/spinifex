@@ -239,12 +239,12 @@ func GenerateCertificatesIfNeeded(configDir string, force bool, bindIP string, a
 	serverKeyPath := filepath.Join(configDir, "server.key")
 
 	if !FileExists(caCertPath) || !FileExists(caKeyPath) {
-		fmt.Println("\n🔐 Generating Certificate Authority...")
+		fmt.Println("\nGenerating Certificate Authority...")
 		if err := GenerateCACert(caCertPath, caKeyPath); err != nil {
 			fmt.Fprintf(os.Stderr, "Error generating CA certificate: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Printf("✅ CA certificate generated:\n")
+		fmt.Printf("CA certificate generated:\n")
 		fmt.Printf("   CA Certificate: %s\n", caCertPath)
 		fmt.Printf("   CA Key: %s\n", caKeyPath)
 
@@ -268,7 +268,7 @@ func GenerateCertificatesIfNeeded(configDir string, force bool, bindIP string, a
 			fmt.Fprintf(os.Stderr, "Error generating server certificate: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Printf("✅ Server certificate generated (signed by CA):\n")
+		fmt.Printf("Server certificate generated (signed by CA):\n")
 		fmt.Printf("   Certificate: %s\n", serverCertPath)
 		fmt.Printf("   Key: %s\n", serverKeyPath)
 	} else {
@@ -347,7 +347,7 @@ func CreateServiceDirectories(spxRoot string) {
 		filepath.Join(spxRoot, "awsgw"),
 	}
 
-	fmt.Println("\n📁 Creating directory structure...")
+	fmt.Println("\nCreating directory structure...")
 	for _, dir := range dirs {
 		if _, err := os.Stat(dir); os.IsNotExist(err) {
 			if err := os.MkdirAll(dir, 0750); err != nil {
@@ -355,7 +355,7 @@ func CreateServiceDirectories(spxRoot string) {
 			}
 		}
 	}
-	fmt.Printf("✅ Directory structure created in %s\n", spxRoot)
+	fmt.Printf("Directory structure created in %s\n", spxRoot)
 }
 
 func FileExists(path string) bool {

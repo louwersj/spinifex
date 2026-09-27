@@ -1335,7 +1335,7 @@ func runAdminInit(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "Error creating config directory: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("✅ Created config directory: %s\n", configDir)
+	fmt.Printf("Created config directory: %s\n", configDir)
 
 	// Identity and crypto material is load-or-generate: a fresh install mints a
 	// new identity bundle, but a --force re-init preserves the existing one so
@@ -1376,7 +1376,7 @@ func runAdminInit(cmd *cobra.Command, args []string) {
 		adminAccessKey = bootstrapResult.AdminAccessKey
 		adminSecretKey = bootstrapResult.AdminSecretKey
 
-		fmt.Println("\n🔐 Preserved existing identity (master key and CA unchanged)")
+		fmt.Println("\nPreserved existing identity (master key and CA unchanged)")
 		fmt.Printf("   Master key: %s\n", filepath.Join(configDir, "master.key"))
 		fmt.Printf("   Admin credentials reissued in %s\n", filepath.Join(bootstrapDir, "bootstrap.json"))
 	} else {
@@ -1402,7 +1402,7 @@ func runAdminInit(cmd *cobra.Command, args []string) {
 		}
 		adminAccessKey = bootstrapResult.AdminAccessKey
 		adminSecretKey = bootstrapResult.AdminSecretKey
-		fmt.Println("\n🔐 Generated IAM master key")
+		fmt.Println("\nGenerated IAM master key")
 		fmt.Printf("   Master key: %s\n", filepath.Join(configDir, "master.key"))
 		fmt.Printf("   Bootstrap: %s\n", filepath.Join(bootstrapDir, "bootstrap.json"))
 		fmt.Printf("   System creds: %s\n", filepath.Join(configDir, "system-credentials.json"))
@@ -1415,7 +1415,7 @@ func runAdminInit(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "Error preparing predastore encryption key: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Println("\n🔐 Predastore encryption key ready (per-node, never transmitted)")
+	fmt.Println("\nPredastore encryption key ready (per-node, never transmitted)")
 	fmt.Printf("   Key: %s\n", predastoreKeyPath)
 
 	// Viperblock at-rest encryption key is cluster-wide; load-or-generate so a
@@ -1426,14 +1426,14 @@ func runAdminInit(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "Error preparing viperblock encryption key: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Println("\n🔐 Viperblock at-rest encryption key ready")
+	fmt.Println("\nViperblock at-rest encryption key ready")
 	fmt.Printf("   Key: %s\n", viperblockKeyPath)
 
 	if !masterKeyExisted {
 		// Never echo the keys: on an ISO install stdout is the systemd journal,
 		// which persists them for the life of the node. They are recoverable from
 		// bootstrap.json and ~/.aws/credentials.
-		fmt.Printf("\n🔑 Generated admin credentials (written to ~/.aws/credentials)\n")
+		fmt.Printf("\nGenerated admin credentials (written to ~/.aws/credentials)\n")
 		fmt.Printf("   Account:     %s (%s)\n", admin.DefaultAccountName(), admin.DefaultAccountID())
 		fmt.Printf("   AWS Profile: spinifex\n")
 	}
@@ -1450,7 +1450,7 @@ func runAdminInit(cmd *cobra.Command, args []string) {
 			fmt.Fprintf(os.Stderr, "Error generating IPsec peer certificate: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Println("🔐 IPsec peer certificate generated (intra-AZ Geneve encryption ON)")
+		fmt.Println("IPsec peer certificate generated (intra-AZ Geneve encryption ON)")
 	}
 
 	// Install CA certificate into system trust store
@@ -1462,7 +1462,7 @@ func runAdminInit(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "Error generating NATS token: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Println("\n🔒 Generated NATS authentication token")
+	fmt.Println("\nGenerated NATS authentication token")
 
 	if spxRoot == "" {
 		spxRoot = DefaultDataDir()
@@ -1535,7 +1535,7 @@ func runAdminInit(cmd *cobra.Command, args []string) {
 	// --- Single-node path (existing behavior) ---
 
 	// Create config files from embedded templates
-	fmt.Println("\n📝 Creating configuration files...")
+	fmt.Println("\nCreating configuration files...")
 
 	dirs, err := createConfigSubdirs(configDir)
 	if err != nil {
@@ -1661,25 +1661,25 @@ func runAdminInit(cmd *cobra.Command, args []string) {
 	// Print external networking summary
 	if externalMode == "nat" {
 		if natPublicPool {
-			fmt.Printf("\n📡 External networking: nat (routed) with public pool — EIPs enabled\n")
+			fmt.Printf("\nExternal networking: nat (routed) with public pool; EIPs enabled\n")
 			if externalSource == "static" {
 				fmt.Printf("  Public pool:   %s - %s (source: static)\n", poolStart, poolEnd)
 			} else {
 				fmt.Printf("  Public pool:   dhcp via %s\n", externalBindBridge)
 			}
 		} else {
-			fmt.Printf("\n📡 External networking: nat (routed, outbound-only — no public IPs/EIPs)\n")
+			fmt.Printf("\nExternal networking: nat (routed, outbound-only; no public IPs/EIPs)\n")
 		}
 		fmt.Printf("  Transit:       %s via %s (host masquerades out any uplink)\n", host.NATTransitCIDR, host.NATTransitHostEnd)
 		fmt.Printf("  Host setup:    ./scripts/setup-ovn.sh --nat-uplink (run before starting services)\n")
 	} else if externalMode != "" {
-		fmt.Printf("\n📡 External networking: %s\n", externalMode)
+		fmt.Printf("\nExternal networking: %s\n", externalMode)
 		fmt.Printf("  WAN interface: %s\n", externalIface)
 		switch externalSource {
 		case "static":
 			fmt.Printf("  Source:        static (IP range)\n")
 			fmt.Printf("  IP pool:       %s - %s\n", poolStart, poolEnd)
-			fmt.Printf("  ⚠️  Ensure %s-%s is excluded from your router's DHCP range.\n", poolStart, poolEnd)
+			fmt.Printf("  Warning: ensure %s-%s is excluded from your router's DHCP range.\n", poolStart, poolEnd)
 		case "dhcp":
 			fmt.Printf("  Source:        dhcp (upstream DHCP server)\n")
 			fmt.Printf("  Bind bridge:   %s\n", externalBindBridge)
@@ -3008,11 +3008,11 @@ func configureHostDNS(settings admin.ConfigSettings, skip bool) {
 // finalizeNodeSetup configures AWS credentials, creates service directories,
 // and sets ownership when running as root.
 func finalizeNodeSetup(dataDir, certPath, adminAccessKey, adminSecretKey, region, bindIP string) {
-	fmt.Println("\n🔧 Configuring AWS credentials...")
+	fmt.Println("\nConfiguring AWS credentials...")
 	if err := admin.SetupAWSCredentials(adminAccessKey, adminSecretKey, region, certPath, bindIP); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: Could not update AWS credentials: %v\n", err)
 	} else {
-		fmt.Println("✅ AWS credentials configured")
+		fmt.Println("AWS credentials configured")
 	}
 
 	admin.CreateServiceDirectories(dataDir)
@@ -3021,7 +3021,7 @@ func finalizeNodeSetup(dataDir, certPath, adminAccessKey, adminSecretKey, region
 		if err := admin.SetServiceOwnership(); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: service ownership not fully applied: %v\n", err)
 		} else {
-			fmt.Println("✅ Service ownership set")
+			fmt.Println("Service ownership set")
 		}
 	}
 }
