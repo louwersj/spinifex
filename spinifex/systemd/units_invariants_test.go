@@ -418,7 +418,10 @@ func TestGeneratedUnitsMatchSource(t *testing.T) {
 // node's reconciled units honest about what changed.
 var unitBodyHashes = map[string]map[int]string{
 	"regenerate-ssh-host-keys.service": {1: "5b2cf4c2ba5d5799c790e32896928c235db92a069583a87004801f58df390e55"},
-	"spinifex-awsgw.service":           {1: "dd662cebca19acca9dbcd0a6f29e6a40125805bdfeabcb94c02fbae07d1f2d6e"},
+	"spinifex-awsgw.service": {
+		1: "dd662cebca19acca9dbcd0a6f29e6a40125805bdfeabcb94c02fbae07d1f2d6e",
+		2: "670704a91518f206cf3362febf7c9ba0feff2adb769e5e64ed9753a87abdce32",
+	},
 	"spinifex-daemon.service": {
 		1: "04b0f23b9cda322e4012d589acc196abe466b619dec5ac0d832897b9af2f926c",
 		2: "97a2d4c72967a9bdf9545ff74593de532e8469568bb717c9958d33b77e62d0ed",
@@ -439,8 +442,12 @@ var unitBodyHashes = map[string]map[int]string{
 		1: "d0f6415b8f0e6ff3c045f2d3ce2794c347bf141066d7e0bd85fcec48797854d8",
 		2: "157e9a7683ac58760ad96679cad9f94121294f34d5cb668d1e586ba0686b4968",
 		3: "f5448bc2aabd3cf1af9dc74f0f12954a9294069da9f5115f8b95b529a070cbdc",
+		4: "2955df6fbacd089f1af48ef08bd48c90f471f9a981bdafa3511b55ee4fb6c5b1",
 	},
-	"spinifex-qmp-collector.service": {1: "beb18e6dd9351901f19d992cb2f757fb0e0e4a4d986402ccdb0ebb0a449f225c"},
+	"spinifex-qmp-collector.service": {
+		1: "beb18e6dd9351901f19d992cb2f757fb0e0e4a4d986402ccdb0ebb0a449f225c",
+		2: "0037bdef8a31487eb45ae1f06c08afdc8de49fc732fa41184e76a4d261d811c3",
+	},
 	"spinifex-shutdown.service":      {1: "bcdc455916f35aa7494b2fe25e691339e8f1e22f031dfd9fd95203a9aa4bdaa4"},
 	"spinifex-system.slice":          {1: "ca450c2b28a8b13dd767957fa9469bd74bd222d7abed79945e83d564d5ce16dd"},
 	"spinifex-ui.service": {
@@ -450,8 +457,12 @@ var unitBodyHashes = map[string]map[int]string{
 	"spinifex-viperblock.service": {
 		1: "5c8cdd2004abf8e5725cbce0200565b9b29be7ab3210a4e0a2cdfe37ec5facb9",
 		2: "5d691bf5ce4a5a636d5dcc07f7bfa36d0da9eb0d7fb26079f89358ca0e5440cd",
+		3: "e12fe64d232f599d30a01458d8c2ba9537531d28786b8d58ca80483dfdd15ba0",
 	},
-	"spinifex-vpcd.service": {1: "1b722640310145767cd34e87f4804852e63f46d2145ed20f8cc5f5400ebc5965"},
+	"spinifex-vpcd.service": {
+		1: "1b722640310145767cd34e87f4804852e63f46d2145ed20f8cc5f5400ebc5965",
+		2: "fb2f8141bf58e72fcac1271a14ddb3e7f45ea7dd054666d995590278b2ec5bbe",
+	},
 	"spinifex.slice":        {1: "f73d9343e0e1bedd647835c8bb0c80fb3a3bd66474661234ecac23a4caafc24f"},
 	"spinifex.target":       {1: "0ffba9faee5a477f8ff7466a6bccb4dc7e04f5cf92a405553c242e6548402078"},
 }

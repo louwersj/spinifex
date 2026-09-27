@@ -1,4 +1,4 @@
-# spinifex-unit-version: 3
+# spinifex-unit-version: 4
 [Unit]
 Description=Spinifex Predastore (S3-compatible Object Storage)
 PartOf=spinifex.target
@@ -14,7 +14,7 @@ Type=simple
 Slice=spinifex-system.slice
 User=spinifex-storage
 Group=spinifex
-ExecStartPre=/var/lib/spinifex/wait-for-nats.sh
+ExecStartPre=/usr/bin/bash /var/lib/spinifex/wait-for-nats.sh
 ExecStart=/usr/local/bin/spx service predastore start
 Restart=on-failure
 RestartSec=5
