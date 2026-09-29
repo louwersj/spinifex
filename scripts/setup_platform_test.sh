@@ -29,7 +29,7 @@ run_case ol9 $'ID=ol\nVERSION_ID=9.6\nPRETTY_NAME="Oracle Linux Server 9.6"' 'ol
 ol9_kernel_module_package_case() {
     local name="$1" kernel="$2" expected="$3" out
     if ! out=$(INSTALL_SPINIFEX_LIB_ONLY=1 TEST_KERNEL="$kernel" bash -c \
-        'uname() { [ "$1" = "-r" ] && printf "%s\\n" "$TEST_KERNEL"; }; . "$1/setup.sh"; ol9_openvswitch_kernel_module_package' \
+        'uname() { [ "$1" = "-r" ] && printf "%s\\n" "$TEST_KERNEL"; }; . "$1/setup.sh"; ol9_openvswitch_kernel_module_packages' \
         _ "$SCRIPT_DIR" 2>&1); then
         echo "FAIL: $name: package selection failed: $out" >&2
         exit 1
@@ -40,11 +40,11 @@ ol9_kernel_module_package_case() {
     }
 }
 
-# Both supported Oracle kernel families must resolve the module package for the
-# exact running kernel. This test has no DNF or root requirement.
+# Both supported Oracle kernel families must resolve all required module RPMs
+# for the exact running kernel. This test has no DNF or root requirement.
 ol9_kernel_module_package_case ol9-uek-module \
     5.15.0-306.177.4.el9uek.x86_64 \
-    kernel-uek-modules-extra-5.15.0-306.177.4.el9uek.x86_64
+    $'kernel-uek-modules-5.15.0-306.177.4.el9uek.x86_64\nkernel-uek-modules-extra-5.15.0-306.177.4.el9uek.x86_64'
 ol9_kernel_module_package_case ol9-rhck-module \
     5.14.0-570.12.1.el9_6.x86_64 \
     kernel-modules-extra-5.14.0-570.12.1.el9_6.x86_64

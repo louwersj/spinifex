@@ -818,22 +818,20 @@ OL9_NETWORK_RUNTIME_PACKAGES="openvswitch2.17 openvswitch2.17-ipsec
 ovn22.09-central ovn22.09-host libreswan"
 
 # OVS is a userspace package, but its forwarding datapath needs the matching
-# kernel module.  Oracle's OL9 cloud images commonly boot UEK with the module
-# split into the versioned `kernel-uek-modules-extra` package; RHCK uses the
-# equivalent `kernel-modules-extra` name.  Determine the exact running-kernel
-# package rather than installing a new kernel (or a broad meta-package) and
-# avoid touching it at all when the module is already available.
-ol9_openvswitch_kernel_module_package() {
+# kernel module. Oracle splits UEK R7's common server modules from the optional
+# extra modules; Open vSwitch is in the former, not guaranteed by the latter.
+# Select the exact running-kernel packages rather than installing a new kernel.
+ol9_openvswitch_kernel_module_packages() {
     local running_kernel
     running_kernel="$(uname -r)"
     case "$running_kernel" in
-        *uek*) printf 'kernel-uek-modules-extra-%s\n' "$running_kernel" ;;
+        *uek*) printf 'kernel-uek-modules-%s\nkernel-uek-modules-extra-%s\n' "$running_kernel" "$running_kernel" ;;
         *) printf 'kernel-modules-extra-%s\n' "$running_kernel" ;;
     esac
 }
 
 ensure_ol9_openvswitch_kernel_module() {
-    local module_package
+    local module_packages
 
     # Use the same privilege wrapper as DNF below: an unprivileged installer
     # must not mistake an EPERM response for an absent module.
@@ -842,11 +840,13 @@ ensure_ol9_openvswitch_kernel_module() {
         return 0
     fi
 
-    module_package="$(ol9_openvswitch_kernel_module_package)"
-    info "Installing Oracle kernel modules required by Open vSwitch: $module_package"
-    $SUDO dnf install -y "$module_package"
+    module_packages="$(ol9_openvswitch_kernel_module_packages)"
+    info "Installing Oracle kernel modules required by Open vSwitch: $(tr '\n' ' ' <<<"$module_packages")"
+    # Intentional word splitting: the helper emits one exact RPM name per line.
+    # shellcheck disable=SC2086
+    $SUDO dnf install -y $module_packages
     $SUDO modprobe openvswitch 2>/dev/null || \
-        fatal "Open vSwitch kernel module is unavailable after installing $module_package"
+        fatal "Open vSwitch kernel module is unavailable after installing the matching Oracle kernel module packages for $(uname -r). Update to a supported OL9 kernel and retry."
     info "Open vSwitch kernel module is available"
 }
 # Test-only override keeps platform-policy coverage unprivileged. Production
